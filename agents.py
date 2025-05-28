@@ -101,7 +101,7 @@ class Truck(Agent):
 
     def load_cargo(self, resource_name, quantity, weight_per_unit_kg=1): # Added resource_name and weight
         """ Loads a specific type of cargo onto the truck. """
-        if self.status not in ["idle_at_depot", "loading_at_depot"]: # Trucks load at depots
+        if self.status not in ["idle_at_depot", "loading_at_depot", "pending_load_for_route"]: # Trucks load at depots
              self._log_event("load_cargo_failed", {"resource_name": resource_name, "quantity": quantity, "reason": f"invalid_status_{self.status}"})
              return False
 
