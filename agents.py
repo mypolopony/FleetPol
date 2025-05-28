@@ -4,6 +4,18 @@ Defines the agents for the Fleet POL Simulator, compatible with Mesa.
 from mesa import Agent
 # import random # No longer needed globally here, model will provide its own random instance
 
+class Location(Agent):
+    """
+    Represents a location in the simulation, as a Mesa Agent.
+    """"""
+    def __init__(self, unique_id, name, loc_type, lat, lon, resources, model):
+        super().__init__(unique_id, model)
+        self.name = name
+        self.location_type = loc_type
+        self.lat = lat
+        self.lon = lon
+        self.resources = resources
+
 class Truck(Agent):
     """
     Represents a truck in the fleet, as a Mesa Agent.
