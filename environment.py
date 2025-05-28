@@ -7,30 +7,41 @@ class Location:
     """
     Represents a physical location in the simulation.
     """
-    def __init__(self, name, latitude, longitude, location_type="generic"):
+    def __init__(self, unique_id, name, lat, lon, loc_type, model, resources=None): # Changed signature
         """
         Initializes a Location.
 
         Args:
-            name (str): Human-readable name of the location (e.g., "Warehouse A", "Customer X").
-            latitude (float): Latitude coordinate.
-            longitude (float): Longitude coordinate.
-            location_type (str): Type of location (e.g., "depot", "customer", "fuel_station", "rest_area").
+            unique_id (int): Unique identifier for the location.
+            name (str): Human-readable name of the location.
+            lat (float): Latitude coordinate.
+            lon (float): Longitude coordinate.
+            loc_type (str): Type of location (e.g., "depot", "customer").
+            model (mesa.Model): The model instance this location belongs to.
+            resources (dict, optional): Initial resources. Defaults to None.
         """
+        self.unique_id = unique_id
         self.name = name
-        self.latitude = latitude
-        self.longitude = longitude
-        self.location_type = location_type
-        self.resources = {}  # e.g., {"fuel": 10000, "loading_docks": 5}
+        self.latitude = lat # Changed from latitude
+        self.longitude = lon # Changed from longitude
+        self.type = loc_type # Changed from location_type, matches model.py usage
+        self.model = model
+        self.resources = resources if resources is not None else {}
         self.current_trucks = []  # List of truck_ids currently at this location
         self.event_log = [] # List of (sim_time, event_type, details)
-        self._log_event(0, "location_created", {"name": self.name, "type": self.location_type, "lat": self.latitude, "lon": self.longitude}) # Assuming sim_time starts at 0
+        
+        # Log creation event using model's current time if available
+        sim_time = self.model.steps if hasattr(self.model, 'steps') else 0
+        self._log_event(sim_time, "location_created", {
+            "name": self.name, "type": self.type,
+            "lat": self.latitude, "lon": self.longitude, "id": self.unique_id
+        })
 
     def __str__(self):
-        return f"Location({self.name}, Type: {self.location_type}, Lat: {self.latitude}, Lon: {self.longitude})"
+        return f"Location({self.name}, Type: {self.type}, Lat: {self.latitude}, Lon: {self.longitude})" # Changed from self.location_type
 
     def __repr__(self):
-        return f"Location(name='{self.name}', lat={self.latitude}, lon={self.longitude}, type='{self.location_type}')"
+        return f"Location(name='{self.name}', lat={self.latitude}, lon={self.longitude}, type='{self.type}')" # Changed from self.location_type
 
     def _log_event(self, sim_time, event_type, details):
         """
