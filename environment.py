@@ -3,11 +3,22 @@ Defines the environment components for the Fleet POL Simulator,
 such as locations, routes, and the world itself.
 """
 
+import mesa
+from typing import Dict, Optional, Any
+
 class Location:
     """
     Represents a physical location in the simulation.
     """
-    def __init__(self, unique_id, name, latitude, longitude, loc_type, model, resources=None, production_details=None):
+    def __init__(self, 
+                 unique_id: int, 
+                 name: str, 
+                 latitude: float, 
+                 longitude: float, 
+                 loc_type:str, 
+                 model:mesa.Model, 
+                 resources: Optional[dict[str, Any]], 
+                 production_details=None) -> None:
         """
         Initializes a Location.
 
@@ -50,7 +61,10 @@ class Location:
     def __repr__(self):
         return f"Location(name='{self.name}', lat={self.latitude}, lon={self.longitude}, type='{self.type}')"
 
-    def _log_event(self, sim_time, event_type, details):
+    def _log_event(self, 
+                   sim_time: float | int, 
+                   event_type: str, 
+                   details: Dict[str, Any]):
         """
         Logs an event for this location.
         Args:
@@ -60,8 +74,17 @@ class Location:
         """
         self.event_log.append((sim_time, event_type, details))
 
-    def add_resource(self, sim_time, resource_name, quantity):
-        """Adds a resource or updates its quantity at the location."""
+    def add_resource(self, 
+                     sim_time: float | int, 
+                     resource_name: str, 
+                     quantity: int) -> None:
+        """Adds a resource or updates its quantity at the location.
+        
+        Args:
+            sim_time (float | int): The current simulation time.
+            resource_name (str): The name of the resource to add.
+            quantity (int): The amount of the resource to add.
+        """
         old_quantity = self.resources.get(resource_name, 0)
         self.resources[resource_name] = old_quantity + quantity
         self._log_event(sim_time, "resource_added", {
@@ -70,8 +93,19 @@ class Location:
             "new_total": self.resources[resource_name]
         })
 
-    def consume_resource(self, sim_time, resource_name, quantity, truck_id=None):
-        """Consumes a resource from the location if available."""
+    def consume_resource(self,
+                         sim_time: float | int, 
+                         resource_name: str, 
+                         quantity: int, 
+                         truck_id=Optional[str]) -> bool:
+        """Consumes a resource from the location if available.
+        
+        Args:
+            sim_time (float | int): The current simulation time.
+            resource_name (str): The name of the resource to consume.
+            quantity (int): The amount of the resource to consume.
+            truck_id (str, optional): ID of the truck consuming the resource, if applicable.
+        """
         if self.resources.get(resource_name, 0) >= quantity:
             self.resources[resource_name] -= quantity
             log_details = {
@@ -93,8 +127,15 @@ class Location:
         self._log_event(sim_time, "resource_consumption_failed", log_details_fail)
         return False
 
-    def truck_arrived(self, sim_time, truck_id):
-        """Records a truck arriving at this location."""
+    def truck_arrived(self, 
+                      sim_time: float | int, 
+                      truck_id: str) -> None:
+        """Records a truck arriving at this location.
+        
+        Args:
+            sim_time (float | int): The current simulation time.
+            truck_id (str): Unique identifier for the truck arriving.
+        """
         if truck_id not in self.current_trucks:
             self.current_trucks.append(truck_id)
             self._log_event(sim_time, "truck_arrived", {"truck_id": truck_id, "current_truck_count": len(self.current_trucks)})
@@ -103,8 +144,15 @@ class Location:
             self._log_event(sim_time, "truck_already_present", {"truck_id": truck_id, "current_truck_count": len(self.current_trucks)})
 
 
-    def truck_departed(self, sim_time, truck_id):
-        """Records a truck departing from this location."""
+    def truck_departed(self, 
+                       sim_time: float | int, 
+                       truck_id: str) -> None:
+        """Records a truck departing from this location.
+        
+        Args:
+            sim_time (float | int): The current simulation time.
+            truck_id (str): Unique identifier for the truck departing.
+        """
         if truck_id in self.current_trucks:
             self.current_trucks.remove(truck_id)
             self._log_event(sim_time, "truck_departed", {"truck_id": truck_id, "current_truck_count": len(self.current_trucks)})
@@ -112,7 +160,7 @@ class Location:
             # Log if truck is not found, could indicate an issue
             self._log_event(sim_time, "truck_not_found_on_departure", {"truck_id": truck_id})
 
-    def step_produce(self):
+    def step_produce(self) -> None:
         """Produces resources based on production_details if applicable."""
         if not self.production_details or "resource_name" not in self.production_details or "rate_per_step" not in self.production_details:
             return
@@ -130,8 +178,21 @@ class Location:
                 # Could add a specific "production_event" if needed for finer-grained tracking.
                 # For now, "resource_added" with context of production_details should suffice.
 
-    def add_demand(self, sim_time, resource_name, quantity, demand_id=None):
-        """Adds a new demand to the location."""
+    def add_demand(self, 
+                   sim_time: float | int,
+                   resource_name: str,
+                   quantity: int,
+                   demand_id: Optional[str] = None) -> str:
+        """Adds a new demand to the location.
+        
+        Args:
+            sim_time (float | int): The current simulation time.
+            resource_name (str): The name of the resource for which demand is being added.
+            quantity (int): The quantity of the resource requested.
+            demand_id (str, optional): Unique identifier for the demand. If None, a simple unique ID will be generated.
+        Returns:
+            str: The unique ID of the created demand.
+        """
         if self.type != "customer":
             self._log_event(sim_time, "add_demand_failed", {"reason": "not_customer_location", "resource": resource_name, "quantity": quantity})
             return None
@@ -157,8 +218,21 @@ class Location:
         })
         return new_demand["demand_id"]
 
-    def fulfill_demand(self, sim_time, resource_name, quantity_delivered, truck_id=None):
-        """Attempts to fulfill pending demands for a given resource."""
+    def fulfill_demand(self, 
+                       sim_time: str | int,
+                       resource_name: str,
+                       quantity_delivered: int, 
+                       truck_id: Optional[str] = None) -> int:
+        """Attempts to fulfill pending demands for a given resource.
+
+        Args:
+            sim_time (float | int): The current simulation time.
+            resource_name (str): The name of the resource being delivered.
+            quantity_delivered (int): The amount of resource delivered.
+            truck_id (str, optional): ID of the truck delivering the resource, if applicable.
+        Returns:
+            int: The total quantity fulfilled from this delivery.
+        """
         if self.type != "customer":
             return 0 # Only customers have demands to fulfill
 

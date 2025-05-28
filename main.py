@@ -124,18 +124,6 @@ def run_mesa_simulation(num_trucks=20, num_depots=3, num_customers=30, num_steps
 
 
 if __name__ == "__main__":
-    # You can adjust these parameters for different simulation runs
+    # Adjust these parameters for different simulation runs
     # Assign the returned model to a variable
     simulation_model = run_mesa_simulation(num_trucks=1, num_depots=2, num_customers=10, num_steps=30)
-    
-    # The following code was intended to run after the simulation,
-    # but it was outside the function and thus 'model' was not defined.
-    # The necessary logging is now correctly inside run_mesa_simulation.
-    # If further processing of simulation_model is needed here, it can be added.
-    # For example, to re-print or do more analysis:
-    # if simulation_model and simulation_model.fleet_agents: # Check if simulation_model is not None
-    #     print("\n--- Post-simulation access to a sample truck log (from __main__) ---")
-    #     sample_truck = next((agent for agent in simulation_model.fleet_agents if isinstance(agent, Truck)), None)
-    #     if sample_truck:
-    #         for event_time, event_type, event_details in sample_truck.history[-5:]: # Print last 5 events
-    #             print(f"Time: {event_time}, Type: {event_type}, Details: {event_details}")
