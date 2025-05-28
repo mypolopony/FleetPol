@@ -54,6 +54,14 @@ class FleetModel(Model):
                 model=self
             )
             self.locations.append(loc)
+            # Add initial demands to customers
+            if loc.type == "customer":
+                num_initial_demands = self.random.randint(0, 3) # Each customer can start with 0 to 3 demands
+                for _ in range(num_initial_demands):
+                    # For now, all demands are for "widgets"
+                    # In a more complex model, resource types could vary
+                    loc.add_demand(self.steps, "widgets", self.random.randint(10, 100))
+
 
         # Create trucks
         for i in range(num_trucks):
@@ -77,29 +85,49 @@ class FleetModel(Model):
 
     def step(self):
         self.fleet_agents.shuffle_do("step")
-        # Assign new routes to idle trucks at depots
+        
+        # Periodically add new demands to customers
+        if self.random.random() < 0.1: # 10% chance each step to add a new demand somewhere
+            customer_locs = [loc for loc in self.locations if loc.type == "customer"]
+            if customer_locs:
+                chosen_customer = self.random.choice(customer_locs)
+                chosen_customer.add_demand(self.steps, "widgets", self.random.randint(20,150))
+                # print(f"[{self.steps}] New demand added at {chosen_customer.name}")
+
+        # Assign new routes to idle trucks at depots, prioritizing customers with demands
         for agent in self.fleet_agents:
             if isinstance(agent, Truck) and agent.status == "idle_at_depot" and not agent.route:
-                # 30% chance to get a new random route
-                if self.random.random() < 0.3: 
-                    num_stops = self.random.randint(1, 3)
+                # 30% chance to try to get a new route
+                if self.random.random() < 0.3:
+                    # Find customers with pending demands
+                    customers_with_demands = []
+                    for loc in self.locations:
+                        if loc.type == "customer" and hasattr(loc, 'demands'):
+                            if any(d['status'] in ['pending', 'partially_fulfilled'] for d in loc.demands):
+                                customers_with_demands.append(loc)
                     
-                    customer_locations = [loc for loc in self.locations if loc.type == "customer"]
-                    if not customer_locations:
-                        continue # Skip if no customers to assign
+                    if not customers_with_demands:
+                        # If no customers have demands, maybe a random exploratory route or stay put
+                        # For now, let's try a random customer if any exist
+                        customer_locations = [loc for loc in self.locations if loc.type == "customer"]
+                        if not customer_locations:
+                            continue # Skip if no customers at all
+                        
+                        num_stops = self.random.randint(1, min(3, len(customer_locations)))
+                        route_plan = self.random.sample(customer_locations, num_stops)
+                    else:
+                        # Prioritize customers with demands
+                        num_stops = self.random.randint(1, min(3, len(customers_with_demands)))
+                        route_plan = self.random.sample(customers_with_demands, num_stops)
 
-                    # Ensure we don't try to pick more stops than available customers
-                    actual_num_stops = min(num_stops, len(customer_locations))
-                    if actual_num_stops == 0:
+                    if not route_plan: # Should not happen if customer_locations or customers_with_demands was populated
                         continue
 
-                    route_plan = self.random.sample(customer_locations, actual_num_stops)
-                    
                     depots = [loc for loc in self.locations if loc.type == "depot"]
                     if depots:
-                        route_plan.append(self.random.choice(depots))
+                        route_plan.append(self.random.choice(depots)) # End route at a depot
                     else:
-                        # If there are no depots, this truck can't complete a typical cycle.
+                        # If no depots, truck can't return. This is a modeling issue.
                         # For now, if no depots, don't assign this route.
                         continue
                     

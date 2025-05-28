@@ -31,6 +31,7 @@ class Truck(Agent):
         self.status = "idle_at_depot"
         self.route = []  # List of Location objects
         self.history = [] # List of (sim_time, event_type, details)
+        self.cargo_manifest = {} # item_name: quantity for specific cargo items
     
         # Log creation event using model's current time
         self._log_event("truck_created", {
@@ -98,38 +99,81 @@ class Truck(Agent):
         })
 
 
-    def load_cargo(self, amount_kg):
-        """ Loads cargo onto the truck. """
-        if self.status not in ["idle_at_depot", "loading_at_depot", "idle_at_customer"]: # Simplified valid states
-             self._log_event("load_cargo_failed", {"amount_kg": amount_kg, "reason": f"invalid_status_{self.status}"})
+    def load_cargo(self, resource_name, quantity, weight_per_unit_kg=1): # Added resource_name and weight
+        """ Loads a specific type of cargo onto the truck. """
+        if self.status not in ["idle_at_depot", "loading_at_depot"]: # Trucks load at depots
+             self._log_event("load_cargo_failed", {"resource_name": resource_name, "quantity": quantity, "reason": f"invalid_status_{self.status}"})
              return False
+
+        amount_kg = quantity * weight_per_unit_kg
         if self.current_cargo_kg + amount_kg <= self.capacity_kg:
             self.current_cargo_kg += amount_kg
+            self.cargo_manifest[resource_name] = self.cargo_manifest.get(resource_name, 0) + quantity
             self._log_event("load_cargo", {
-                "amount_kg": amount_kg, "current_cargo_kg": self.current_cargo_kg,
+                "resource_name": resource_name,
+                "quantity_loaded": quantity,
+                "weight_loaded_kg": amount_kg,
+                "current_cargo_kg": self.current_cargo_kg,
+                "current_manifest": self.cargo_manifest.copy(),
                 "location_name": str(self.current_location.name)
             })
+            # Attempt to consume from location (depot)
+            if hasattr(self.current_location, 'consume_resource'):
+                if not self.current_location.consume_resource(self.model.steps, resource_name, quantity, truck_id=self.descriptive_id):
+                    # Rollback if location doesn't have the resource
+                    self.current_cargo_kg -= amount_kg
+                    self.cargo_manifest[resource_name] -= quantity
+                    if self.cargo_manifest[resource_name] == 0:
+                        del self.cargo_manifest[resource_name]
+                    self._log_event("load_cargo_failed", {"resource_name": resource_name, "quantity": quantity, "reason": "source_location_insufficient_resource"})
+                    return False
             return True
         self._log_event("load_cargo_failed", {
-            "amount_kg": amount_kg, "reason": "exceeds_capacity",
+            "resource_name": resource_name,
+            "quantity_requested": quantity,
+            "weight_requested_kg": amount_kg,
+            "reason": "exceeds_capacity",
             "location_name": str(self.current_location.name)
         })
         return False
 
-    def unload_cargo(self, amount_kg):
-        """ Unloads cargo from the truck. """
-        if self.status not in ["idle_at_customer", "unloading_at_customer"]: # Simplified valid states
-            self._log_event("unload_cargo_failed", {"amount_kg": amount_kg, "reason": f"invalid_status_{self.status}"})
+    def unload_cargo(self, resource_name, quantity_to_unload, weight_per_unit_kg=1): # Added resource_name and weight
+        """ Unloads a specific type of cargo from the truck. """
+        if self.status not in ["idle_at_customer", "unloading_at_customer"]: # Trucks unload at customers
+            self._log_event("unload_cargo_failed", {"resource_name": resource_name, "quantity": quantity_to_unload, "reason": f"invalid_status_{self.status}"})
             return False
-        if self.current_cargo_kg - amount_kg >= 0:
-            self.current_cargo_kg -= amount_kg
+
+        if self.cargo_manifest.get(resource_name, 0) >= quantity_to_unload:
+            amount_kg_to_unload = quantity_to_unload * weight_per_unit_kg
+            self.current_cargo_kg -= amount_kg_to_unload
+            self.cargo_manifest[resource_name] -= quantity_to_unload
+            if self.cargo_manifest[resource_name] == 0:
+                del self.cargo_manifest[resource_name]
+
+            # Attempt to fulfill demand at the customer location
+            fulfilled_at_loc = 0
+            if hasattr(self.current_location, 'fulfill_demand'):
+                fulfilled_at_loc = self.current_location.fulfill_demand(self.model.steps, resource_name, quantity_to_unload, truck_id=self.descriptive_id)
+            
+            # Even if not all was used by demand, log it as unloaded from truck
             self._log_event("unload_cargo", {
-                "amount_kg": amount_kg, "current_cargo_kg": self.current_cargo_kg,
-                "location_name": str(self.current_location.name)
+                "resource_name": resource_name,
+                "quantity_unloaded": quantity_to_unload,
+                "weight_unloaded_kg": amount_kg_to_unload,
+                "current_cargo_kg": self.current_cargo_kg,
+                "current_manifest": self.cargo_manifest.copy(),
+                "location_name": str(self.current_location.name),
+                "fulfilled_at_location": fulfilled_at_loc
             })
+            # If location couldn't take it (e.g. no demand), it's still off the truck.
+            # More complex logic could have truck take it back or try other demands.
             return True
+
         self._log_event("unload_cargo_failed", {
-            "amount_kg": amount_kg, "reason": "insufficient_cargo",
+            "resource_name": resource_name,
+            "quantity_requested_to_unload": quantity_to_unload,
+            "reason": "insufficient_cargo_on_truck",
+            "current_manifest": self.cargo_manifest.copy(),
             "location_name": str(self.current_location.name)
         })
         return False
@@ -181,22 +225,48 @@ class Truck(Agent):
             next_destination = self.route[0] # Peek at next destination
             
             # Basic decision: if at depot and has cargo space, try to load (example)
-            if self.status == "idle_at_depot" and self.current_cargo_kg < self.capacity_kg / 2:
-                 # Try to load some cargo if at depot and not full
-                if self.model.random.random() < 0.5: # 50% chance to try loading
-                    amount_to_load = self.model.random.randint(1000, int(self.capacity_kg / 4))
-                    self.set_status("loading_at_depot")
-                    self.load_cargo(amount_to_load)
-                    # print(f"[{self.model.steps}] {self.descriptive_id} attempting to load at {self.current_location.name}")
-                    return # End step here, loading takes time
+            # This logic needs to be smarter, e.g. load based on demands on its route
+            if self.status == "idle_at_depot" and self.current_cargo_kg < self.capacity_kg:
+                # Simplified: pick a common resource and load some if depot has it
+                # In a real model, this would be driven by orders/demands
+                resource_to_load = "widgets" # Example resource
+                if self.current_location.resources.get(resource_to_load, 0) > 0:
+                    if self.model.random.random() < 0.5: # 50% chance to try loading
+                        # Try to load up to 1/4 capacity or what's available at depot
+                        max_qty_to_load_by_weight = int((self.capacity_kg - self.current_cargo_kg) / 1) # Assuming 1kg/unit
+                        qty_at_depot = self.current_location.resources.get(resource_to_load,0)
+                        
+                        amount_to_load_qty = self.model.random.randint(1, max(1,min(int(self.capacity_kg / 4), max_qty_to_load_by_weight, qty_at_depot)))
 
-            # Basic decision: if at customer and has cargo, try to unload
+                        if amount_to_load_qty > 0:
+                            self.set_status("loading_at_depot")
+                            self.load_cargo(resource_to_load, amount_to_load_qty, weight_per_unit_kg=1)
+                            # print(f"[{self.model.steps}] {self.descriptive_id} attempting to load {amount_to_load_qty} {resource_to_load} at {self.current_location.name}")
+                            return # End step here, loading takes time
+
+            # Basic decision: if at customer and has cargo for that customer's demands
             elif self.status == "idle_at_customer" and self.current_cargo_kg > 0:
-                if self.model.random.random() < 0.7: # 70% chance to try unloading
-                    amount_to_unload = self.model.random.randint(1000, self.current_cargo_kg)
-                    self.set_status("unloading_at_customer")
-                    self.unload_cargo(amount_to_unload)
-                    # print(f"[{self.model.steps}] {self.descriptive_id} attempting to unload at {self.current_location.name}")
+                # Check if this customer has pending demands for cargo the truck is carrying
+                unloaded_anything = False
+                if hasattr(self.current_location, 'demands'):
+                    for demand in self.current_location.demands:
+                        if demand["status"] in ["pending", "partially_fulfilled"] and \
+                           demand["resource_name"] in self.cargo_manifest and \
+                           self.cargo_manifest[demand["resource_name"]] > 0:
+                            
+                            qty_on_truck = self.cargo_manifest[demand["resource_name"]]
+                            qty_needed_for_demand = demand["quantity_requested"] - demand["quantity_fulfilled"]
+                            amount_to_unload_qty = min(qty_on_truck, qty_needed_for_demand)
+
+                            if amount_to_unload_qty > 0:
+                                self.set_status("unloading_at_customer")
+                                # print(f"[{self.model.steps}] {self.descriptive_id} attempting to unload {amount_to_unload_qty} of {demand['resource_name']} for demand {demand['demand_id']} at {self.current_location.name}")
+                                self.unload_cargo(demand["resource_name"], amount_to_unload_qty, weight_per_unit_kg=1)
+                                unloaded_anything = True
+                                # Potentially, a truck could fulfill multiple demands in one stop if time allows
+                                # For simplicity, one unload action per step if a suitable demand is found.
+                                break # Process one unload per step for now
+                if unloaded_anything:
                     return # End step here, unloading takes time
 
             # If no loading/unloading action, or if ready to move:

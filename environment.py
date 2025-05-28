@@ -29,6 +29,7 @@ class Location:
         self.resources = resources if resources is not None else {}
         self.current_trucks = []  # List of truck_ids currently at this location
         self.event_log = [] # List of (sim_time, event_type, details)
+        self.demands = [] # List of demand dicts: {"demand_id": unique_id, "resource_name": str, "quantity": int, "status": "pending/fulfilled"}
         
         # Log creation event using model's current time if available
         sim_time = self.model.steps if hasattr(self.model, 'steps') else 0
@@ -38,7 +39,7 @@ class Location:
         })
 
     def __str__(self):
-        return f"Location({self.name}, Type: {self.type}, Lat: {self.latitude}, Lon: {self.longitude})" # Changed from self.location_type
+        return f"Location({self.name}, Type: {self.type}, Lat: {self.latitude}, Lon: {self.longitude}, Demands: {len(self.demands)})"
 
     def __repr__(self):
         return f"Location(name='{self.name}', lat={self.latitude}, lon={self.longitude}, type='{self.type}')" # Changed from self.location_type
@@ -105,35 +106,144 @@ class Location:
             # Log if truck is not found, could indicate an issue
             self._log_event(sim_time, "truck_not_found_on_departure", {"truck_id": truck_id})
 
+    def add_demand(self, sim_time, resource_name, quantity, demand_id=None):
+        """Adds a new demand to the location."""
+        if self.type != "customer":
+            self._log_event(sim_time, "add_demand_failed", {"reason": "not_customer_location", "resource": resource_name, "quantity": quantity})
+            return None
+
+        if demand_id is None:
+            # Create a simple unique ID for the demand within this location
+            demand_id = f"demand_{self.name}_{len(self.demands)}_{self.model.random.randint(1000,9999)}"
+
+        new_demand = {
+            "demand_id": demand_id,
+            "resource_name": resource_name,
+            "quantity_requested": quantity,
+            "quantity_fulfilled": 0,
+            "status": "pending", # "pending", "partially_fulfilled", "fulfilled"
+            "created_at_step": sim_time
+        }
+        self.demands.append(new_demand)
+        self._log_event(sim_time, "demand_added", {
+            "demand_id": new_demand["demand_id"],
+            "resource_name": resource_name,
+            "quantity": quantity,
+            "location_name": self.name
+        })
+        return new_demand["demand_id"]
+
+    def fulfill_demand(self, sim_time, resource_name, quantity_delivered, truck_id=None):
+        """Attempts to fulfill pending demands for a given resource."""
+        if self.type != "customer":
+            return 0 # Only customers have demands to fulfill
+
+        fulfilled_this_delivery = 0
+        for demand in self.demands:
+            if demand["status"] in ["pending", "partially_fulfilled"] and \
+               demand["resource_name"] == resource_name and \
+               quantity_delivered > 0:
+
+                can_fulfill_for_this_demand = demand["quantity_requested"] - demand["quantity_fulfilled"]
+                amount_to_fulfill = min(quantity_delivered, can_fulfill_for_this_demand)
+
+                demand["quantity_fulfilled"] += amount_to_fulfill
+                quantity_delivered -= amount_to_fulfill
+                fulfilled_this_delivery += amount_to_fulfill
+
+                old_status = demand["status"]
+                if demand["quantity_fulfilled"] >= demand["quantity_requested"]:
+                    demand["status"] = "fulfilled"
+                else:
+                    demand["status"] = "partially_fulfilled"
+
+                log_details = {
+                    "demand_id": demand["demand_id"],
+                    "resource_name": resource_name,
+                    "quantity_delivered_for_demand": amount_to_fulfill,
+                    "total_fulfilled_for_demand": demand["quantity_fulfilled"],
+                    "demand_status_before": old_status,
+                    "demand_status_after": demand["status"],
+                    "location_name": self.name
+                }
+                if truck_id:
+                    log_details["truck_id"] = truck_id
+                self._log_event(sim_time, "demand_updated", log_details)
+
+                if quantity_delivered == 0:
+                    break # No more quantity from this delivery to distribute
+        
+        if fulfilled_this_delivery > 0:
+             self._log_event(sim_time, "demand_fulfillment_processed", {
+                "resource_name": resource_name,
+                "total_delivered_for_resource": fulfilled_this_delivery,
+                "remaining_delivery_unallocated": quantity_delivered,
+                "location_name": self.name,
+                "truck_id": truck_id
+            })
+        return fulfilled_this_delivery
+
 
 # Example Usage (will be integrated into the main simulation)
 if __name__ == '__main__':
-    sim_clock = 0
-    depot = Location("Central Depot", 34.0522, -118.2437, "depot") # Logs creation at sim_clock 0
-    sim_clock +=1
+    # Mock model for standalone testing
+    class MockModel:
+        def __init__(self):
+            self.steps = 0
+            import random
+            self.random = random.Random(12345) # For predictable demand_ids if needed
+
+    mock_model = MockModel()
+    sim_clock = 0 # Use model steps
+
+    depot = Location(unique_id=1, name="Central Depot", lat=34.0522, lon=-118.2437, loc_type="depot", model=mock_model)
+    mock_model.steps +=1 ; sim_clock = mock_model.steps
     depot.add_resource(sim_clock, "loading_docks", 10)
     sim_clock +=1
     depot.add_resource(sim_clock, "fuel", 50000) # Liters
     print(depot)
     print(f"[{sim_clock}] Resources at {depot.name}: {depot.resources}")
 
-    sim_clock +=1
-    customer_site = Location("Customer MegaCorp", 34.0600, -118.2500, "customer")
+    mock_model.steps +=1 ; sim_clock = mock_model.steps
+    customer_site = Location(unique_id=2, name="Customer MegaCorp", lat=34.0600, lon=-118.2500, loc_type="customer", model=mock_model)
     print(customer_site)
 
-    # Simulating resource consumption
-    sim_clock +=1
+    mock_model.steps +=1 ; sim_clock = mock_model.steps
+    demand_id_1 = customer_site.add_demand(sim_clock, "widgets", 100)
+    print(f"[{sim_clock}] Added demand {demand_id_1} for 100 widgets at {customer_site.name}")
+    mock_model.steps +=1 ; sim_clock = mock_model.steps
+    demand_id_2 = customer_site.add_demand(sim_clock, "gadgets", 50)
+    print(f"[{sim_clock}] Added demand {demand_id_2} for 50 gadgets at {customer_site.name}")
+    print(f"[{sim_clock}] Demands at {customer_site.name}: {customer_site.demands}")
+
+
+    # Simulating resource consumption (at depot)
+    mock_model.steps +=1 ; sim_clock = mock_model.steps
     if depot.consume_resource(sim_clock, "fuel", 100, truck_id="TRK-TEST-01"):
         print(f"[{sim_clock}] Consumed 100L fuel from {depot.name}. Remaining: {depot.resources['fuel']}L")
     else:
         print(f"[{sim_clock}] Failed to consume fuel from {depot.name}.")
 
-    sim_clock +=1
+    # Simulating truck arrival/departure (at depot)
+    mock_model.steps +=1 ; sim_clock = mock_model.steps
     depot.truck_arrived(sim_clock, "TRK-TEST-01")
     print(f"[{sim_clock}] Trucks at {depot.name}: {depot.current_trucks}")
-    sim_clock +=1
+    mock_model.steps +=1 ; sim_clock = mock_model.steps
     depot.truck_departed(sim_clock, "TRK-TEST-01")
     print(f"[{sim_clock}] Trucks at {depot.name}: {depot.current_trucks}")
+
+    # Simulating demand fulfillment (at customer)
+    mock_model.steps +=1 ; sim_clock = mock_model.steps
+    print(f"[{sim_clock}] Before fulfillment at {customer_site.name}: {customer_site.demands[0]}")
+    fulfilled_amount = customer_site.fulfill_demand(sim_clock, "widgets", 70, truck_id="TRK-TEST-01")
+    print(f"[{sim_clock}] Delivered 70 widgets to {customer_site.name}. Fulfilled: {fulfilled_amount}. Demand status: {customer_site.demands[0]['status']}")
+    print(f"[{sim_clock}] After partial fulfillment: {customer_site.demands[0]}")
+
+    mock_model.steps +=1 ; sim_clock = mock_model.steps
+    fulfilled_amount_2 = customer_site.fulfill_demand(sim_clock, "widgets", 40, truck_id="TRK-TEST-01") # Deliver more
+    print(f"[{sim_clock}] Delivered 40 more widgets to {customer_site.name}. Fulfilled: {fulfilled_amount_2}. Demand status: {customer_site.demands[0]['status']}")
+    print(f"[{sim_clock}] After full fulfillment: {customer_site.demands[0]}")
+
 
     print(f"\n--- {depot.name} Event Log ---")
     for event in depot.event_log:
