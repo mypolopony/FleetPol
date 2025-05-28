@@ -22,11 +22,12 @@ class FleetModel(Model):
         self._current_agent_id = 0
 
         # New spatial grid setup for visualization
-        self.space = ContinuousSpace(map_width, map_height, torus=False)
+        # self.space = ContinuousSpace(map_width, map_height, torus=False)
 
         # AgentSet is used to manage trucks
         # The second argument should be the random.Random instance for AgentSet's internal shuffling.
         self.fleet_agents = AgentSet([], self.random)
+        self.schedule = self.fleet_agents
 
         # Create locations
         self.locations = []
@@ -67,6 +68,8 @@ class FleetModel(Model):
             self.fleet_agents.add(truck_agent)
             # Place truck on space
             self.space.place_agent(truck_agent, (start_depot.longitude, start_depot.latitude))
+            self.schedule.add(truck_agent)
+            truck_agent.pos = (start_depot.longitude, start_depot.latitude)
 
     def next_id(self):
         self._current_agent_id += 1
