@@ -34,7 +34,7 @@ def run_mesa_simulation(num_trucks=20, num_depots=3, num_customers=30, num_steps
             
     print("\nSample Initial Locations:")
     for i, loc in enumerate(model.locations): # Changed from model.locations.items()
-        if i < 3: # Print first 3 locations
+        if i < 100: # Print first 3 locations
             print(loc)
             if loc.resources: print(f"  Resources: {loc.resources}")
         elif i >=3:
