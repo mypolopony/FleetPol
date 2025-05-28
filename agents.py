@@ -2,13 +2,12 @@
 Defines the agents for the Fleet POL Simulator, compatible with Mesa.
 """
 from mesa import Agent
-# import random # No longer needed globally here, model will provide its own random instance
 
 class Truck(Agent):
     """
     Represents a truck in the fleet, as a Mesa Agent.
     """
-    def __init__(self, unique_id, model, descriptive_id, start_location, capacity_kg=20000):
+    def __init__(self, unique_id, model, descriptive_id, start_location, capacity_kg=150):
         """
         Initializes a Truck agent.
 
@@ -260,7 +259,7 @@ class Truck(Agent):
             
             # After attempting to load (or if conditions weren't met for an attempt):
             # Check if "full enough" or if depot is out of the resource.
-            is_full_enough = self.current_cargo_kg >= self.capacity_kg * 0.75
+            is_full_enough = self.current_cargo_kg >= int(self.capacity_kg) * 0.75
             depot_has_resource = self.current_location.type == "depot" and self.current_location.resources.get(resource_to_load, 0) > 0
             
             if not loaded_this_step and (is_full_enough or not depot_has_resource or self.current_location.type != "depot"):
@@ -288,7 +287,7 @@ class Truck(Agent):
                 # Not full enough and depot has resources, try to load more next step.
                 self.set_status("pending_load_for_route", {"reason": "continuing_load_attempt_from_loading_status"})
 
-        elif self.route and self.status not in ["en_route", "unloading_at_customer", "pending_load_for_route", "loading_at_depot"]:
+        elif self.route and self.status not in ["en_route", "pending_load_for_route", "loading_at_depot"]:
             # This covers "idle_at_customer" with a new route, or "pending_departure_to_..."
             # Also "idle_at_other" if it has a route.
             unloaded_anything = False # Initialize here
@@ -311,6 +310,7 @@ class Truck(Agent):
                                 unloaded_anything = True
                                 break
                 if unloaded_anything:
+                    self.set_status("idle_at_customer") # After unloading, stay idle at customer
                     return
 
             if self.status.startswith("pending_departure_to_") or \
