@@ -111,6 +111,8 @@ def run_mesa_simulation(num_trucks=20, num_depots=3, num_customers=30, num_steps
     # Example: Accessing DataCollector data if it were enabled in FleetModel
     # This block should also be inside the function
     if hasattr(model, 'datacollector'):
+        model.datacollector.get_agent_vars_dataframe().to_csv("agent_data.csv")  # Save agent data to CSV
+        model.datacollector.get_model_vars_dataframe().to_csv("model_data.csv")  # Save model data to CSV
         model_data = model.datacollector.get_model_vars_dataframe()
         agent_data = model.datacollector.get_agent_vars_dataframe()
         print("\n--- Model Data ---")
