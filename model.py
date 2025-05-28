@@ -51,11 +51,11 @@ class FleetModel(mesa.Model):
             truck_id_str = f"TRK-{str(i+1).zfill(3)}"
             start_depot = self.random.choice(depot_locations)
             # Mesa agent unique_id is an int, truck_id_str is for description
-            truck_agent = Truck(unique_id=self._get_next_agent_id(), # Using manual ID generation
+            truck_agent = Truck(unique_id=self._get_next_agent_id(),            # Using manual ID generation
                                 model=self,
                                 descriptive_id=truck_id_str,
                                 start_location=start_depot,
-                                capacity_kg=self.random.randint(15, 30) * 1000)
+                                capacity_kg=self.random.randint(150, 1500))     # Random capacity
             self.fleet_agents.add(truck_agent)
             # print(f"Created: {truck_agent} at {start_depot.name}")
 
@@ -90,7 +90,7 @@ class FleetModel(mesa.Model):
                            "widgets": self.random.randint(500, 2000)},
                 production_details={"resource_name": "widgets",
                                     "rate_per_step": self.random.randint(50, 150),
-                                    "capacity": self.random.randint(5000, 10000)}
+                                    "capacity": self.random.randint(500, 1000)}
             )
             self.locations[name] = depot # Storing by name, could also store in a list or by ID
 
