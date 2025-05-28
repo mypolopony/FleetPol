@@ -31,6 +31,7 @@ class Truck(Agent):
         self.status = "idle_at_depot"
         self.route = []  # List of Location objects
         self.history = [] # List of (sim_time, event_type, details)
+        self.pos = (self.current_location.longitude, self.current_location.latitude)
 
         # Log creation event using model's current time
         self._log_event("truck_created", {
@@ -62,7 +63,10 @@ class Truck(Agent):
 
     def _perform_move(self, destination_location):
         """Internal helper to manage location changes and logging."""
-        if not destination_location:
+        if destination_location:
+            self.pos = (destination_location.longitude, destination_location.latitude)
+        else:
+            # If no destination specified, log and return
             self._log_event("move_failed", {"reason": "no_destination_specified"})
             return
 
