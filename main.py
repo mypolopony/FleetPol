@@ -126,7 +126,7 @@ def run_mesa_simulation(num_trucks=20, num_depots=3, num_customers=30, num_steps
 if __name__ == "__main__":
     # You can adjust these parameters for different simulation runs
     # Assign the returned model to a variable
-    simulation_model = run_mesa_simulation(num_trucks=15, num_depots=2, num_customers=10, num_steps=30)
+    simulation_model = run_mesa_simulation(num_trucks=1, num_depots=2, num_customers=10, num_steps=30)
     
     # The following code was intended to run after the simulation,
     # but it was outside the function and thus 'model' was not defined.
