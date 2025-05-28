@@ -13,13 +13,18 @@ model_params = {
 }
 
 def agent_portrayal(agent):
-    return {
-        "shape": "circle",
-        "color": "blue",
-        "size": 5,
-        "x": agent.current_location.lon,
-        "y": agent.current_location.lat,
-    }
+    if hasattr(agent, "pos"):
+        print(f"Portraying agent: {agent.name} at {agent.pos}")
+        return {
+            "shape": "circle",
+            "color": "blue",
+            "size": 5,
+            "x": agent.pos[0],
+            "y": agent.pos[1],
+        }
+    else:
+        print(f"Agent {agent.name} has no position!")
+        return None
 
 @solara.component
 def Page():
