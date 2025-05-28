@@ -4,18 +4,6 @@ Defines the agents for the Fleet POL Simulator, compatible with Mesa.
 from mesa import Agent
 # import random # No longer needed globally here, model will provide its own random instance
 
-class Location(Agent):
-    """
-    Represents a location in the simulation, as a Mesa Agent.
-    """"""
-    def __init__(self, unique_id, name, loc_type, lat, lon, resources, model):
-        super().__init__(unique_id, model)
-        self.name = name
-        self.location_type = loc_type
-        self.lat = lat
-        self.lon = lon
-        self.resources = resources
-
 class Truck(Agent):
     """
     Represents a truck in the fleet, as a Mesa Agent.
@@ -88,6 +76,10 @@ class Truck(Agent):
             from_location_obj.truck_departed(self.model.steps, self.descriptive_id) # Changed to model.steps
 
         self.current_location = destination_location
+        # Update agent's position in the ContinuousSpace
+        if hasattr(self.model, 'space') and self.model.space is not None:
+            self.model.space.move_agent(self, (destination_location.lon, destination_location.lat))
+        
         self.status = "en_route" # Status becomes en_route upon departure
 
         # Simulate arrival at the next step or after some delay in a more complex model
@@ -164,6 +156,7 @@ class Truck(Agent):
         """
         Defines the agent's behavior at each step of the simulation.
         """
+        
         # Simple behavior: if on a route and not currently 'en_route', try to move to the next location.
         # If 'en_route', it means it departed in a previous part of this step or a previous step.
         # For simplicity, let's assume movement takes one step.
