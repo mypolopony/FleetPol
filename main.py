@@ -33,11 +33,16 @@ def run_mesa_simulation(num_trucks=20, num_depots=3, num_customers=30, num_steps
             break
             
     print("\nSample Initial Locations:")
-    for i, loc in enumerate(model.locations): # Changed from model.locations.items()
-        if i < 100: # Print first 3 locations
-            print(loc)
-            if loc.resources: print(f"  Resources: {loc.resources}")
-        elif i >=3:
+    for i, (loc_name, loc_obj) in enumerate(model.locations.items()): # Unpack key and value
+        if i < 100: # Print first few
+            print(f"Name: {loc_name}, Details: {loc_obj}") # loc_obj will use Location.__str__
+            if hasattr(loc_obj, 'resources') and loc_obj.resources:
+                print(f"  Resources: {loc_obj.resources}")
+            if hasattr(loc_obj, 'production_details') and loc_obj.production_details:
+                print(f"  Production: {loc_obj.production_details}")
+            if hasattr(loc_obj, 'demands') and loc_obj.demands:
+                print(f"  Demands: {loc_obj.demands}")
+        else:
             break
 
     # Run the simulation
@@ -56,7 +61,14 @@ def run_mesa_simulation(num_trucks=20, num_depots=3, num_customers=30, num_steps
         if sample_truck_agent:
             print(f"\n--- Event Log for Truck {sample_truck_agent.descriptive_id} (Mesa ID: {sample_truck_agent.unique_id}) ---")
             for event_time, event_type, event_details in sample_truck_agent.history:
-                print(f"Time: {event_time}, Type: {event_type}, Details: {event_details}")
+                log_line = f"Time: {event_time}, Type: {event_type}"
+                if event_type == "load_cargo":
+                    log_line += f", Resource: {event_details.get('resource_name')}, Qty Loaded: {event_details.get('quantity_loaded')}"
+                elif event_type == "unload_cargo":
+                    log_line += f", Resource: {event_details.get('resource_name')}, Qty Unloaded: {event_details.get('quantity_unloaded')}"
+                # Optionally, add more specific parsing for other event types or just print full details
+                log_line += f", Details: {event_details}"
+                print(log_line)
         else:
             print("\nNo Truck agents found to display history.")
     else:
@@ -64,12 +76,37 @@ def run_mesa_simulation(num_trucks=20, num_depots=3, num_customers=30, num_steps
 
     # This block should be inside the function, using the 'model' instance
     if model.locations: # model.locations is now a list
-        sample_location = model.locations[0] # Get the first location from the list
-        print(f"\n--- Event Log for Location {sample_location.name} ---")
-        for event_time, event_type, event_details in sample_location.event_log:
-            print(f"Time: {event_time}, Type: {event_type}, Details: {event_details}")
-    else:
-        print("\nNo locations in the simulation to display history.")
+        # Print logs for a sample depot and a sample customer if they exist
+        # model.locations is a dictionary, so we iterate through its values (Location objects)
+        sample_depot = next((loc_obj for loc_obj in model.locations.values() if loc_obj.type == "depot"), None)
+        sample_customer = next((loc_obj for loc_obj in model.locations.values() if loc_obj.type == "customer"), None)
+
+        if sample_depot:
+            print(f"\n--- Event Log for Depot {sample_depot.name} ---")
+            for event_time, event_type, event_details in sample_depot.event_log:
+                log_line = f"Time: {event_time}, Type: {event_type}"
+                if event_type == "resource_consumed":
+                    log_line += f", Resource: {event_details.get('resource_name')}, Qty Consumed: {event_details.get('quantity_consumed')}, By: {event_details.get('truck_id')}"
+                elif event_type == "resource_added": # From production
+                     log_line += f", Resource: {event_details.get('resource_name')}, Qty Added: {event_details.get('quantity_added')}"
+                log_line += f", Details: {event_details}"
+                print(log_line)
+        
+        if sample_customer:
+            print(f"\n--- Event Log for Customer {sample_customer.name} ---")
+            for event_time, event_type, event_details in sample_customer.event_log:
+                log_line = f"Time: {event_time}, Type: {event_type}"
+                if event_type == "demand_added":
+                    log_line += f", Resource: {event_details.get('resource_name')}, Qty Demanded: {event_details.get('quantity')}"
+                elif event_type == "demand_updated":
+                    log_line += f", Resource: {event_details.get('resource_name')}, Qty Delivered: {event_details.get('quantity_delivered_for_demand')}, Truck: {event_details.get('truck_id')}"
+                log_line += f", Details: {event_details}"
+                print(log_line)
+            
+        if not sample_depot and not sample_customer:
+             print("\nNo depot or customer locations found to display specific history.")
+        elif not model.locations: # Should be caught by the outer if, but as a fallback
+            print("\nNo locations in the simulation to display history.")
 
     # Example: Accessing DataCollector data if it were enabled in FleetModel
     # This block should also be inside the function
