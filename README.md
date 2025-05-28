@@ -63,3 +63,27 @@ The simulation revolves around a few key components:
 *   **`app.py`**: (for a web-based visualization or interface - to be detailed further).
 *   **`solara_patch.py`**: (related to the re-routing notebook extensions).
 *   **`README.md`**: This file.
+
+## Sample Output
+
+For one truck:
+
+```csv
+Step  AgentID  Status                             Location      Cargo  Comment
+1     1        idle_at_depot                      Depot-B       0 	   Truck us waiting at the depot	
+2     1        idle_at_depot                      Depot-B       0      There's only a 30% it gets a route
+3     1        idle_at_depot                      Depot-B       0      Still waiting for that 30%
+4     1        idle_at_depot                      Depot-B       0      Still waiting
+5     1        pending_load_for_route             Depot-B       0      Receives a route
+6     1        loading_at_depot                   Depot-B       968    Loads materials based on customer domands
+7     1        pending_departure_to_Customer-008  Depot-B       968	   Waiting to travel to first customer (WHY?)
+8     1        en_route                           Customer-008  968    Arrives at first customer 
+9     1        idle_at_customer                   Customer-008  968    Waiting tick
+10    1        finished_unloading                 Customer-008  902    Finished unloading materials across multiple orders (could probably expand for each order at that customer)
+11    1        en_route                           Customer-009  902    Immediately takes off and arrives at the next route (should probably be idle before)
+12    1        idle_at_customer                   Customer-009  902    Waiting tick
+13    1        finished_unloading                 Customer-009  753    Finished unloading materials
+14    1        en_route                           Depot-B       753    Back to the depot
+15    1        idle_at_depot                      Depot-B       753    Waiting to refill or new route
+```
+```
