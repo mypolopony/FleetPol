@@ -33,7 +33,7 @@ def run_mesa_simulation(num_trucks=20, num_depots=3, num_customers=30, num_steps
             break
             
     print("\nSample Initial Locations:")
-    for i, (name, loc) in enumerate(model.locations.items()):
+    for i, loc in enumerate(model.locations): # Changed from model.locations.items()
         if i < 3: # Print first 3 locations
             print(loc)
             if loc.resources: print(f"  Resources: {loc.resources}")
@@ -62,9 +62,9 @@ def run_mesa_simulation(num_trucks=20, num_depots=3, num_customers=30, num_steps
     else:
         print("\nNo agents in the simulation to display history.")
 
-    if model.locations:
-        sample_loc_name = list(model.locations.keys())[0]
-        sample_location = model.locations[sample_loc_name]
+    # This block should be inside the function, using the 'model' instance
+    if model.locations: # model.locations is now a list
+        sample_location = model.locations[0] # Get the first location from the list
         print(f"\n--- Event Log for Location {sample_location.name} ---")
         for event_time, event_type, event_details in sample_location.event_log:
             print(f"Time: {event_time}, Type: {event_type}, Details: {event_details}")
@@ -72,6 +72,7 @@ def run_mesa_simulation(num_trucks=20, num_depots=3, num_customers=30, num_steps
         print("\nNo locations in the simulation to display history.")
 
     # Example: Accessing DataCollector data if it were enabled in FleetModel
+    # This block should also be inside the function
     if hasattr(model, 'datacollector'):
         model_data = model.datacollector.get_model_vars_dataframe()
         agent_data = model.datacollector.get_agent_vars_dataframe()
@@ -79,8 +80,23 @@ def run_mesa_simulation(num_trucks=20, num_depots=3, num_customers=30, num_steps
         print(model_data.tail())
         print("\n--- Agent Data (Last few entries) ---")
         print(agent_data.tail())
+    
+    return model # Return the model instance
 
 
 if __name__ == "__main__":
     # You can adjust these parameters for different simulation runs
-    run_mesa_simulation(num_trucks=15, num_depots=2, num_customers=10, num_steps=30)
+    # Assign the returned model to a variable
+    simulation_model = run_mesa_simulation(num_trucks=15, num_depots=2, num_customers=10, num_steps=30)
+    
+    # The following code was intended to run after the simulation,
+    # but it was outside the function and thus 'model' was not defined.
+    # The necessary logging is now correctly inside run_mesa_simulation.
+    # If further processing of simulation_model is needed here, it can be added.
+    # For example, to re-print or do more analysis:
+    # if simulation_model and simulation_model.fleet_agents: # Check if simulation_model is not None
+    #     print("\n--- Post-simulation access to a sample truck log (from __main__) ---")
+    #     sample_truck = next((agent for agent in simulation_model.fleet_agents if isinstance(agent, Truck)), None)
+    #     if sample_truck:
+    #         for event_time, event_type, event_details in sample_truck.history[-5:]: # Print last 5 events
+    #             print(f"Time: {event_time}, Type: {event_type}, Details: {event_details}")
