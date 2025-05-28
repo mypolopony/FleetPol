@@ -7,7 +7,7 @@ class Location:
     """
     Represents a physical location in the simulation.
     """
-    def __init__(self, unique_id, name, lat, lon, loc_type, model, resources=None, production_details=None): # Added production_details
+    def __init__(self, unique_id, name, latitude, longitude, loc_type, model, resources=None, production_details=None):
         """
         Initializes a Location.
 
@@ -24,9 +24,9 @@ class Location:
         """
         self.unique_id = unique_id
         self.name = name
-        self.latitude = lat # Changed from latitude
-        self.longitude = lon # Changed from longitude
-        self.type = loc_type # Changed from location_type, matches model.py usage
+        self.latitude = latitude
+        self.longitude = longitude
+        self.type = loc_type
         self.model = model
         self.resources = resources if resources is not None else {}
         self.current_trucks = []  # List of truck_ids currently at this location
@@ -48,7 +48,7 @@ class Location:
         return f"Location({self.name}, Type: {self.type}, Lat: {self.latitude}, Lon: {self.longitude}, Demands: {len(self.demands)})"
 
     def __repr__(self):
-        return f"Location(name='{self.name}', lat={self.latitude}, lon={self.longitude}, type='{self.type}')" # Changed from self.location_type
+        return f"Location(name='{self.name}', lat={self.latitude}, lon={self.longitude}, type='{self.type}')"
 
     def _log_event(self, sim_time, event_type, details):
         """
