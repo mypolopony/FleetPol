@@ -30,8 +30,8 @@ class FleetModel(mesa.Model):
         
         # In Mesa 3, AgentSet replaces traditional schedulers for many use cases.
         # Agents are added to this set, and then operations like shuffle_do are called.
-        # The first argument is the initial list of agents, the second is the model.
-        self.fleet_agents = AgentSet([], self) 
+        # The first argument is the initial list of agents, the second is the randomizer.
+        self.fleet_agents = AgentSet([], random.Random(seed)) 
         self.running = True # For conditional stopping via DataCollector or other means
 
         self.locations = {} # Store Location objects, keyed by name or ID
