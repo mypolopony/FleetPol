@@ -1,13 +1,20 @@
 """
 Defines the agents for the Fleet POL Simulator, compatible with Mesa.
 """
-from mesa import Agent
+from typing import Dict, Optional, Any
+from mesa import Agent, Model
+from environment import Location
 
 class Truck(Agent):
     """
     Represents a truck in the fleet, as a Mesa Agent.
     """
-    def __init__(self, unique_id, model, descriptive_id, start_location, capacity_kg=150):
+    def __init__(self, 
+                 unique_id: int,
+                 model: Model,
+                 descriptive_id: str,
+                 start_location: Location,
+                 capacity_kg: int = 150) -> None:
         """
         Initializes a Truck agent.
 
@@ -49,7 +56,9 @@ class Truck(Agent):
                 f"Loc: {str(self.current_location.name)}, Status: {self.status}, "
                 f"Cargo: {self.current_cargo_kg}kg)")
 
-    def _log_event(self, event_type, details):
+    def _log_event(self,
+                   event_type: str,
+                   details: Dict[str, Any]) -> None:
         """
         Logs an event for this truck using the model's current simulation time.
         Args:
@@ -61,8 +70,12 @@ class Truck(Agent):
         log_entry_details.update(details)
         self.history.append((self.model.steps, event_type, log_entry_details))
 
-    def _perform_move(self, destination_location):
-        """Internal helper to manage location changes and logging."""
+    def _perform_move(self, 
+                      destination_location: Location) -> None:
+        """Internal helper to manage location changes and logging.
+        
+        Args:
+            destination_location (Location): The target location to move to."""
         if destination_location:
             self.pos = (destination_location.longitude, destination_location.latitude)
         else:
@@ -99,8 +112,19 @@ class Truck(Agent):
         })
 
 
-    def load_cargo(self, resource_name, quantity, weight_per_unit_kg=1): # Added resource_name and weight
-        """ Loads a specific type of cargo onto the truck. """
+    def load_cargo(self, 
+                   resource_name: str,
+                   quantity: int,
+                   weight_per_unit_kg: float = 1.0) -> bool:
+        """ Loads a specific type of cargo onto the truck. 
+        
+        Args:
+            resource_name (str): The name of the resource to load (e.g., "widgets").
+            quantity (int): The number of units to load.
+            weight_per_unit_kg (float): The weight of each unit in kilograms. Default is 1kg.
+        Returns:
+            bool: True if loading was successful, False otherwise.
+        """
         if self.status not in ["idle_at_depot", "loading_at_depot", "pending_load_for_route"]: # Trucks load at depots
              self._log_event("load_cargo_failed", {"resource_name": resource_name, "quantity": quantity, "reason": f"invalid_status_{self.status}"})
              return False
@@ -178,8 +202,15 @@ class Truck(Agent):
         })
         return False
 
-    def set_status(self, new_status, details=None):
-        """ Sets the truck's status and logs it. """
+    def set_status(self, 
+                   new_status: str, 
+                   details=None):
+        """ Sets the truck's status and logs it.
+         
+        Args:
+            new_status (str): The new status to set (e.g., "idle_at_depot", "en_route").
+            details (dict, optional): Additional details to log with the status change.
+        """
         old_status = self.status
         self.status = new_status
         log_details = {"old_status": old_status, "new_status": new_status,
@@ -188,7 +219,8 @@ class Truck(Agent):
             log_details.update(details)
         self._log_event("status_change", log_details)
 
-    def assign_route(self, route_locations):
+    def assign_route(self, 
+                     route_locations: list[Location]) -> None:
         """ Assigns a route (list of Location objects) to the truck. """
         self.route = list(route_locations) # Ensure it's a mutable copy
         self._log_event("route_assigned", {

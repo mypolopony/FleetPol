@@ -1,6 +1,7 @@
 """
 Defines the Mesa Model for the Fleet POL Simulator.
 """
+from typing import Dict, Optional, Any
 import mesa
 from mesa.agent import AgentSet
 import random
@@ -13,7 +14,13 @@ class FleetModel(mesa.Model):
     The main model for the fleet simulation.
     Manages trucks (agents) and locations.
     """
-    def __init__(self, num_trucks: int=10, num_depots: int=2, num_customers: int=20, map_width: int=50, map_height: int=50, seed=None) -> None:
+    def __init__(self, 
+                 num_trucks: int=10, 
+                 num_depots: int=2, 
+                 num_customers: int=20, 
+                 map_width: int=50, 
+                 map_height: int=50,
+                 seed=None) -> None:
         """
         Initialize the FleetModel.
 
@@ -70,7 +77,9 @@ class FleetModel(mesa.Model):
         self._current_agent_id += 1
         return self._current_agent_id
 
-    def _create_locations(self, num_depots: int, num_customers: int) -> None:
+    def _create_locations(self, 
+                          num_depots: int, 
+                          num_customers: int) -> None:
         """Helper method to create and store locations."""
         # Using _get_next_agent_id for location unique IDs as well, ensuring they are unique across all entities.
         # Alternatively, a separate counter for locations could be used if IDs only need to be unique among locations.
