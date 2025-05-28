@@ -220,7 +220,7 @@ if __name__ == '__main__':
     mock_model = MockModel()
     sim_clock = 0 # Use model steps
 
-    depot = Location(unique_id=1, name="Central Depot", lat=34.0522, lon=-118.2437, loc_type="depot", model=mock_model)
+    depot = Location(unique_id=1, name="Central Depot", latitude=34.0522, longitude=-118.2437, loc_type="depot", model=mock_model)
     mock_model.steps +=1 ; sim_clock = mock_model.steps
     depot.add_resource(sim_clock, "loading_docks", 10)
     sim_clock +=1
@@ -229,7 +229,7 @@ if __name__ == '__main__':
     print(f"[{sim_clock}] Resources at {depot.name}: {depot.resources}")
 
     mock_model.steps +=1 ; sim_clock = mock_model.steps
-    customer_site = Location(unique_id=2, name="Customer MegaCorp", lat=34.0600, lon=-118.2500, loc_type="customer", model=mock_model)
+    customer_site = Location(unique_id=2, name="Customer MegaCorp", latitude=34.0600, longitude=-118.2500, loc_type="customer", model=mock_model)
     print(customer_site)
 
     mock_model.steps +=1 ; sim_clock = mock_model.steps
