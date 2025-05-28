@@ -31,6 +31,7 @@ class Truck(Agent):
         self.route = []  # List of Location objects
         self.history = [] # List of (sim_time, event_type, details)
         self.cargo_manifest = {} # item_name: quantity for specific cargo items
+        self.unloading_in_progress = False
     
         # Log creation event using model's current time
         self._log_event("truck_created", {
@@ -208,12 +209,6 @@ class Truck(Agent):
         """
         Defines the agent's behavior at each step of the simulation.
         """
-
-        # Simple behavior: if on a route and not currently 'en_route', try to move to the next location.
-        # If 'en_route', it means it departed in a previous part of this step or a previous step.
-        # For simplicity, let's assume movement takes one step.
-        # A more complex model would handle travel time over multiple steps.
-
         if self.status == "en_route":
             # If it was 'en_route', it means it "arrived" in this step (simplified).
             # The 'arrive' event was logged by _perform_move. Now set status based on location type.
@@ -275,7 +270,7 @@ class Truck(Agent):
         elif self.status == "loading_at_depot":
             # This status indicates a successful load_cargo call happened in the *same step* from "pending_load_for_route".
             # Now, decide if more loading is needed or if it's time to depart.
-            is_full_enough = self.current_cargo_kg >= self.capacity_kg * 0.75
+            is_full_enough = self.current_cargo_kg >= int(self.capacity_kg * 0.75)
             depot_has_resource = self.current_location.resources.get("widgets", 0) > 0 # Assuming widgets
 
             if is_full_enough or not depot_has_resource:
@@ -288,12 +283,11 @@ class Truck(Agent):
                 self.set_status("pending_load_for_route", {"reason": "continuing_load_attempt_from_loading_status"})
 
         elif self.route and self.status not in ["en_route", "pending_load_for_route", "loading_at_depot"]:
-            # This covers "idle_at_customer" with a new route, or "pending_departure_to_..."
+            # This covers "idle_at_customer",  "pending_departure_to_...", or finished loading
             # Also "idle_at_other" if it has a route.
-            unloaded_anything = False # Initialize here
 
+            # Try to unload as much as we can
             if self.status == "idle_at_customer" and self.current_cargo_kg > 0:
-                # unloaded_anything = False # No longer needed here, moved up
                 if hasattr(self.current_location, 'demands'):
                     for demand in self.current_location.demands:
                         if demand["status"] in ["pending", "partially_fulfilled"] and \
@@ -307,14 +301,34 @@ class Truck(Agent):
                             if amount_to_unload_qty > 0:
                                 self.set_status("unloading_at_customer")
                                 self.unload_cargo(demand["resource_name"], amount_to_unload_qty, weight_per_unit_kg=1)
-                                unloaded_anything = True
-                                break
-                if unloaded_anything:
-                    self.set_status("idle_at_customer") # After unloading, stay idle at customer
+                                demand["quantity_fulfilled"] += amount_to_unload_qty
+                                # Check if demand is fully satisfied
+                                if demand["quantity_fulfilled"] >= demand["quantity_requested"]:
+                                    demand["status"] = "fulfilled"
+                                    # Log the fulfillment event
+                                    self._log_event("demand_fulfilled", {
+                                        "resource_name": demand["resource_name"],
+                                        "quantity_fulfilled": amount_to_unload_qty,
+                                        "customer_name": str(self.current_location.name),
+                                        "demand_id": demand.get("id", "unknown")
+                                    })
+                                else:
+                                    demand["status"] = "partially_fulfilled"
+
+                                # Log the unload event
+                                self._log_event("unload_cargo", {
+                                    "resource_name": demand["resource_name"],
+                                    "quantity_unloaded": amount_to_unload_qty,
+                                    "weight_unloaded_kg": amount_to_unload_qty * 1, # Assuming 1kg/unit for widgets
+                                    "current_cargo_kg": self.current_cargo_kg,
+                                    "current_manifest": self.cargo_manifest.copy(),
+                                    "location_name": str(self.current_location.name)
+                                })
+                    self.status = "finished_unloading" # Set status to indicate unloading is done
                     return
 
             if self.status.startswith("pending_departure_to_") or \
-               (self.status == "idle_at_customer" and not unloaded_anything and self.route) or \
+               (self.status == "finished_unloading" and self.route) or \
                (self.status == "idle_at_other" and self.route):
 
                 if not self.route:
