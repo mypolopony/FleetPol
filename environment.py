@@ -7,7 +7,7 @@ class Location:
     """
     Represents a physical location in the simulation.
     """
-    def __init__(self, unique_id, name, lat, lon, loc_type, model, resources=None): # Changed signature
+    def __init__(self, unique_id, name, lat, lon, loc_type, model, resources=None, production_details=None): # Added production_details
         """
         Initializes a Location.
 
@@ -16,9 +16,11 @@ class Location:
             name (str): Human-readable name of the location.
             lat (float): Latitude coordinate.
             lon (float): Longitude coordinate.
-            loc_type (str): Type of location (e.g., "depot", "customer").
+            loc_type (str): Type of location (e.g., "depot", "customer", "factory").
             model (mesa.Model): The model instance this location belongs to.
             resources (dict, optional): Initial resources. Defaults to None.
+            production_details (dict, optional): Details for resource production.
+                                                 e.g., {"resource_name": "widgets", "rate_per_step": 5, "capacity": 1000}
         """
         self.unique_id = unique_id
         self.name = name
@@ -30,13 +32,17 @@ class Location:
         self.current_trucks = []  # List of truck_ids currently at this location
         self.event_log = [] # List of (sim_time, event_type, details)
         self.demands = [] # List of demand dicts: {"demand_id": unique_id, "resource_name": str, "quantity": int, "status": "pending/fulfilled"}
+        self.production_details = production_details if production_details is not None else {}
         
         # Log creation event using model's current time if available
         sim_time = self.model.steps if hasattr(self.model, 'steps') else 0
-        self._log_event(sim_time, "location_created", {
+        log_create_details = {
             "name": self.name, "type": self.type,
             "lat": self.latitude, "lon": self.longitude, "id": self.unique_id
-        })
+        }
+        if self.production_details:
+            log_create_details["production"] = self.production_details
+        self._log_event(sim_time, "location_created", log_create_details)
 
     def __str__(self):
         return f"Location({self.name}, Type: {self.type}, Lat: {self.latitude}, Lon: {self.longitude}, Demands: {len(self.demands)})"
@@ -105,6 +111,24 @@ class Location:
         else:
             # Log if truck is not found, could indicate an issue
             self._log_event(sim_time, "truck_not_found_on_departure", {"truck_id": truck_id})
+
+    def step_produce(self):
+        """Produces resources based on production_details if applicable."""
+        if not self.production_details or "resource_name" not in self.production_details or "rate_per_step" not in self.production_details:
+            return
+
+        resource_name = self.production_details["resource_name"]
+        rate = self.production_details["rate_per_step"]
+        capacity = self.production_details.get("capacity", float('inf')) # Optional production capacity
+
+        current_amount = self.resources.get(resource_name, 0)
+        if current_amount < capacity:
+            amount_to_produce = min(rate, capacity - current_amount)
+            if amount_to_produce > 0:
+                self.add_resource(self.model.steps, resource_name, amount_to_produce)
+                # No separate log for "production" event, add_resource already logs "resource_added"
+                # Could add a specific "production_event" if needed for finer-grained tracking.
+                # For now, "resource_added" with context of production_details should suffice.
 
     def add_demand(self, sim_time, resource_name, quantity, demand_id=None):
         """Adds a new demand to the location."""

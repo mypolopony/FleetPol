@@ -38,7 +38,12 @@ class FleetModel(Model):
                 loc_type="depot",
                 lat=self.random.uniform(0, map_height),
                 lon=self.random.uniform(0, map_width),
-                resources={"loading_docks": self.random.randint(1, 5), "fuel_liters": self.random.randint(20000, 50000)},
+                resources={"loading_docks": self.random.randint(1, 5),
+                           "fuel_liters": self.random.randint(20000, 50000),
+                           "widgets": self.random.randint(500, 2000)}, # Initial stock of widgets
+                production_details={"resource_name": "widgets",
+                                    "rate_per_step": self.random.randint(50, 150), # Depots produce widgets
+                                    "capacity": self.random.randint(5000, 10000)},
                 model=self
             )
             self.locations.append(loc)
@@ -50,7 +55,7 @@ class FleetModel(Model):
                 loc_type="customer",
                 lat=self.random.uniform(0, map_height),
                 lon=self.random.uniform(0, map_width),
-                resources={},
+                resources={}, # Customers start with no resources
                 model=self
             )
             self.locations.append(loc)
@@ -58,8 +63,6 @@ class FleetModel(Model):
             if loc.type == "customer":
                 num_initial_demands = self.random.randint(0, 3) # Each customer can start with 0 to 3 demands
                 for _ in range(num_initial_demands):
-                    # For now, all demands are for "widgets"
-                    # In a more complex model, resource types could vary
                     loc.add_demand(self.steps, "widgets", self.random.randint(10, 100))
 
 
@@ -68,8 +71,8 @@ class FleetModel(Model):
             start_depot = self.random.choice([loc for loc in self.locations if loc.type == "depot"])
             truck_agent = Truck(
                 unique_id=self.next_id(),
-                descriptive_id=f"TRK-{i+1:03d}", # Changed 'name' to 'descriptive_id'
-                start_location=start_depot, # Changed 'current_location' to 'start_location'
+                descriptive_id=f"TRK-{i+1:03d}",
+                start_location=start_depot,
                 model=self,
                 capacity_kg=self.random.randint(15, 30) * 1000 # Added capacity_kg
             )
@@ -84,8 +87,15 @@ class FleetModel(Model):
         return self._current_agent_id
 
     def step(self):
-        self.fleet_agents.shuffle_do("step")
+        # --- Location Production Step ---
+        for loc in self.locations:
+            if hasattr(loc, 'step_produce'):
+                loc.step_produce()
+
+        # --- Agent (Truck) Step ---
+        self.fleet_agents.shuffle_do("step") # Calls step() on each truck
         
+        # --- Demand Generation Step ---
         # Periodically add new demands to customers
         if self.random.random() < 0.1: # 10% chance each step to add a new demand somewhere
             customer_locs = [loc for loc in self.locations if loc.type == "customer"]
@@ -94,34 +104,33 @@ class FleetModel(Model):
                 chosen_customer.add_demand(self.steps, "widgets", self.random.randint(20,150))
                 # print(f"[{self.steps}] New demand added at {chosen_customer.name}")
 
+        # --- Route Assignment Step ---
         # Assign new routes to idle trucks at depots, prioritizing customers with demands
         for agent in self.fleet_agents:
             if isinstance(agent, Truck) and agent.status == "idle_at_depot" and not agent.route:
                 # 30% chance to try to get a new route
                 if self.random.random() < 0.3:
-                    # Find customers with pending demands
+                    # Find customers with pending demands for "widgets" (or other producible goods)
                     customers_with_demands = []
                     for loc in self.locations:
                         if loc.type == "customer" and hasattr(loc, 'demands'):
-                            if any(d['status'] in ['pending', 'partially_fulfilled'] for d in loc.demands):
+                            if any(d['status'] in ['pending', 'partially_fulfilled'] and d['resource_name'] == "widgets" for d in loc.demands):
                                 customers_with_demands.append(loc)
                     
+                    route_plan = []
                     if not customers_with_demands:
-                        # If no customers have demands, maybe a random exploratory route or stay put
-                        # For now, let's try a random customer if any exist
-                        customer_locations = [loc for loc in self.locations if loc.type == "customer"]
-                        if not customer_locations:
-                            continue # Skip if no customers at all
-                        
-                        num_stops = self.random.randint(1, min(3, len(customer_locations)))
-                        route_plan = self.random.sample(customer_locations, num_stops)
+                        # If no customers have demands for widgets, maybe a random exploratory route or stay put
+                        # For now, let's try a random customer if any exist for other potential goods (not yet modeled)
+                        # Or simply don't assign a route if no specific demand to target.
+                        # For simplicity, if no widget demands, truck stays idle unless we add other logic.
+                        pass # Truck remains idle or could get a generic route
                     else:
-                        # Prioritize customers with demands
+                        # Prioritize customers with demands for widgets
                         num_stops = self.random.randint(1, min(3, len(customers_with_demands)))
                         route_plan = self.random.sample(customers_with_demands, num_stops)
 
-                    if not route_plan: # Should not happen if customer_locations or customers_with_demands was populated
-                        continue
+                    if not route_plan:
+                        continue # No route determined for this truck this step
 
                     depots = [loc for loc in self.locations if loc.type == "depot"]
                     if depots:
