@@ -86,4 +86,5 @@ Step  AgentID  Status                             Location      Cargo  Comment
 14    1        en_route                           Depot-B       753    Back to the depot
 15    1        idle_at_depot                      Depot-B       753    Waiting to refill or new route
 ```
-```
+
+See more complicated outputs in `output/`
