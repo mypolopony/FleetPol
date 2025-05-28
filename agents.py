@@ -195,8 +195,14 @@ class Truck(Agent):
             "route_names": [str(loc.name) for loc in route_locations],
             "num_stops": len(route_locations)
         })
-        if self.route and self.status in ["idle_at_depot", "idle_at_customer"]: # Start moving if idle and has a route
+        if self.route and self.status == "idle_at_depot":
+            # If idle at depot and gets a route, prepare to load
+            self.set_status("pending_load_for_route", {"route_assigned": [str(loc.name) for loc in self.route]})
+        elif self.route and self.status == "idle_at_customer":
+            # If at customer and gets a new route (e.g., to return to depot or another customer), prepare to depart
             self.set_status(f"pending_departure_to_{self.route[0].name}")
+        elif self.route and self.status == "idle_at_other": # Or any other idle state where it might get a route
+             self.set_status(f"pending_departure_to_{self.route[0].name}")
 
 
     def step(self):
@@ -221,33 +227,74 @@ class Truck(Agent):
             # print(f"[{self.model.steps}] {self.descriptive_id} completed move, now {self.status} at {self.current_location.name}")
 
 
-        elif self.route and self.status not in ["en_route", "loading_at_depot", "unloading_at_customer"]: # Can start moving
-            next_destination = self.route[0] # Peek at next destination
-            
-            # Basic decision: if at depot and has cargo space, try to load (example)
-            # This logic needs to be smarter, e.g. load based on demands on its route
-            if self.status == "idle_at_depot" and self.current_cargo_kg < self.capacity_kg:
-                # Simplified: pick a common resource and load some if depot has it
-                # In a real model, this would be driven by orders/demands
-                resource_to_load = "widgets" # Example resource
+        elif self.status == "pending_load_for_route":
+            # This truck is at a depot and has been assigned a route. Try to load cargo.
+            resource_to_load = "widgets" # Example: always try to load widgets if on route
+            loaded_this_step = False
+
+            if self.current_location.type == "depot" and self.current_cargo_kg < self.capacity_kg:
                 if self.current_location.resources.get(resource_to_load, 0) > 0:
-                    if self.model.random.random() < 0.5: # 50% chance to try loading
-                        # Try to load up to 1/4 capacity or what's available at depot
-                        max_qty_to_load_by_weight = int((self.capacity_kg - self.current_cargo_kg) / 1) # Assuming 1kg/unit
-                        qty_at_depot = self.current_location.resources.get(resource_to_load,0)
-                        
-                        amount_to_load_qty = self.model.random.randint(1, max(1,min(int(self.capacity_kg / 4), max_qty_to_load_by_weight, qty_at_depot)))
+                    max_qty_to_load_by_weight = int((self.capacity_kg - self.current_cargo_kg) / 1) # Assuming 1kg/unit for widgets
+                    qty_at_depot = self.current_location.resources.get(resource_to_load, 0)
+                    
+                    target_cargo_kg = self.capacity_kg * 0.75 # Target 75% capacity
+                    needed_kg = target_cargo_kg - self.current_cargo_kg
+                    
+                    if needed_kg > 0:
+                        target_load_qty = int(needed_kg / 1) # Assuming 1kg/unit for widgets
+                        amount_to_load_qty = min(target_load_qty, qty_at_depot, max_qty_to_load_by_weight)
+                        amount_to_load_qty = max(0, amount_to_load_qty)
 
                         if amount_to_load_qty > 0:
-                            self.set_status("loading_at_depot")
-                            self.load_cargo(resource_to_load, amount_to_load_qty, weight_per_unit_kg=1)
-                            # print(f"[{self.model.steps}] {self.descriptive_id} attempting to load {amount_to_load_qty} {resource_to_load} at {self.current_location.name}")
-                            return # End step here, loading takes time
+                            if self.load_cargo(resource_to_load, amount_to_load_qty, weight_per_unit_kg=1):
+                                loaded_this_step = True
+                                # Stay in "pending_load_for_route" if not yet full and depot might have more,
+                                # or transition to "loading_at_depot" as an intermediate if multi-step loading was complex.
+                                # For now, let's assume it will re-evaluate in next step if still pending_load_for_route.
+                                # If it's now "full enough", it will transition out below.
+                                self.set_status("loading_at_depot", {"reason": "load_successful_eval_next_step"}) # Mark as actively loading this step
+                            else:
+                                # Loading failed (e.g. depot ran out mid-attempt)
+                                self.set_status(f"pending_departure_to_{self.route[0].name}" if self.route else "idle_at_depot", {"reason": "load_attempt_failed_in_pending_load"})
+                            return # End step, loading action (success or fail) takes time.
+            
+            # After attempting to load (or if conditions weren't met for an attempt):
+            # Check if "full enough" or if depot is out of the resource.
+            is_full_enough = self.current_cargo_kg >= self.capacity_kg * 0.75
+            depot_has_resource = self.current_location.type == "depot" and self.current_location.resources.get(resource_to_load, 0) > 0
+            
+            if not loaded_this_step and (is_full_enough or not depot_has_resource or self.current_location.type != "depot"):
+                # Transition to pending departure if route exists and loading is considered done/not possible.
+                if self.route:
+                    self.set_status(f"pending_departure_to_{self.route[0].name}", {"reason": "loading_phase_complete_or_cannot_load"})
+                else:
+                    self.set_status("idle_at_depot", {"reason": "no_route_after_pending_load_evaluation"})
+            elif not loaded_this_step: # Did not load, but not full and depot has resource - implies it should try again
+                 self.set_status("pending_load_for_route", {"reason": "re_evaluating_load"}) # Stay to try again next step
+            # If loaded_this_step was true, we already returned.
 
-            # Basic decision: if at customer and has cargo for that customer's demands
-            elif self.status == "idle_at_customer" and self.current_cargo_kg > 0:
-                # Check if this customer has pending demands for cargo the truck is carrying
-                unloaded_anything = False
+        elif self.status == "loading_at_depot":
+            # This status indicates a successful load_cargo call happened in the *same step* from "pending_load_for_route".
+            # Now, decide if more loading is needed or if it's time to depart.
+            is_full_enough = self.current_cargo_kg >= self.capacity_kg * 0.75
+            depot_has_resource = self.current_location.resources.get("widgets", 0) > 0 # Assuming widgets
+
+            if is_full_enough or not depot_has_resource:
+                if self.route:
+                    self.set_status(f"pending_departure_to_{self.route[0].name}", {"reason": "loading_complete_ready_for_departure"})
+                else:
+                    self.set_status("idle_at_depot", {"reason": "loading_complete_but_no_route"})
+            else:
+                # Not full enough and depot has resources, try to load more next step.
+                self.set_status("pending_load_for_route", {"reason": "continuing_load_attempt_from_loading_status"})
+
+        elif self.route and self.status not in ["en_route", "unloading_at_customer", "pending_load_for_route", "loading_at_depot"]:
+            # This covers "idle_at_customer" with a new route, or "pending_departure_to_..."
+            # Also "idle_at_other" if it has a route.
+            unloaded_anything = False # Initialize here
+
+            if self.status == "idle_at_customer" and self.current_cargo_kg > 0:
+                # unloaded_anything = False # No longer needed here, moved up
                 if hasattr(self.current_location, 'demands'):
                     for demand in self.current_location.demands:
                         if demand["status"] in ["pending", "partially_fulfilled"] and \
@@ -260,18 +307,22 @@ class Truck(Agent):
 
                             if amount_to_unload_qty > 0:
                                 self.set_status("unloading_at_customer")
-                                # print(f"[{self.model.steps}] {self.descriptive_id} attempting to unload {amount_to_unload_qty} of {demand['resource_name']} for demand {demand['demand_id']} at {self.current_location.name}")
                                 self.unload_cargo(demand["resource_name"], amount_to_unload_qty, weight_per_unit_kg=1)
                                 unloaded_anything = True
-                                # Potentially, a truck could fulfill multiple demands in one stop if time allows
-                                # For simplicity, one unload action per step if a suitable demand is found.
-                                break # Process one unload per step for now
+                                break
                 if unloaded_anything:
-                    return # End step here, unloading takes time
+                    return
 
-            # If no loading/unloading action, or if ready to move:
-            if self.status not in ["loading_at_depot", "unloading_at_customer"]:
-                actual_destination = self.route.pop(0) # Consume the destination from route
+            if self.status.startswith("pending_departure_to_") or \
+               (self.status == "idle_at_customer" and not unloaded_anything and self.route) or \
+               (self.status == "idle_at_other" and self.route):
+
+                if not self.route:
+                    current_loc_type = self.current_location.type if self.current_location else "unknown"
+                    self.set_status("idle_at_depot" if current_loc_type == "depot" else "idle_at_location", {"reason":"no_route_before_departure"})
+                    return
+                
+                actual_destination = self.route.pop(0)
                 # print(f"[{self.model.steps}] {self.descriptive_id} starting move from {self.current_location.name} to {actual_destination.name}")
                 self._perform_move(actual_destination)
                 # Status becomes 'en_route' due to _perform_move
