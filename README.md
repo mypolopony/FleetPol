@@ -1,4 +1,4 @@
-# Fleet POL (Petrol, Oil, Lubricants) Simulator
+# Fleet POL (Patterns of Life) Simulator
 
 This project simulates a fleet of trucks managing resources (like "widgets") between depots and customers. It is built using the Mesa agent-based modeling framework.
 
@@ -15,7 +15,7 @@ The simulation revolves around a few key components:
     *   Demand generation at customer sites.
     *   Assigning routes to trucks, prioritizing those that can fulfill active demands.
 *   **Simulation Runner (`main.py`):** This script initializes and runs the `FleetModel`, printing out initial setup details and event logs for sample agents and locations after the simulation completes.
-*   **Web Application (`app.py`, `solara_patch.py`):** (Details to be added - currently these files exist but their integration with the core simulation logic for visualization or interaction is not fully detailed in this README yet).
+*   **Web Application (`app.py`, `solara_patch.py`):** (Details to be added - currently these files exist but their integration with the core simulation logic for visualization or interaction is not fully detailed yet. There seem to be problems with `solara` and the most up to date version of Mesa)
 
 ## Simulation Flow
 
@@ -60,6 +60,6 @@ The simulation revolves around a few key components:
 *   **`model.py`**: Defines the `FleetModel` class, orchestrating the simulation.
 *   **`agents.py`**: Defines the `Truck` agent class.
 *   **`environment.py`**: Defines the `Location` class (used for Depots and Customers).
-*   **`app.py`**: (Presumably for a web-based visualization or interface - to be detailed further).
-*   **`solara_patch.py`**: (Purpose to be detailed further, likely related to the Solara web framework if `app.py` uses it).
+*   **`app.py`**: (for a web-based visualization or interface - to be detailed further).
+*   **`solara_patch.py`**: (related to the re-routing notebook extensions).
 *   **`README.md`**: This file.
