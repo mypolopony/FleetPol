@@ -31,7 +31,6 @@ class Truck(Agent):
         self.status = "idle_at_depot"
         self.route = []  # List of Location objects
         self.history = [] # List of (sim_time, event_type, details)
-        self.pos = (self.current_location.longitude, self.current_location.latitude)
 
         # Log creation event using model's current time
         self._log_event("truck_created", {
@@ -160,7 +159,7 @@ class Truck(Agent):
         """
         Defines the agent's behavior at each step of the simulation.
         """
-        
+
         # Simple behavior: if on a route and not currently 'en_route', try to move to the next location.
         # If 'en_route', it means it departed in a previous part of this step or a previous step.
         # For simplicity, let's assume movement takes one step.
