@@ -279,8 +279,8 @@ class Truck(Agent):
         elif not self.route and self.status not in ["en_route", "idle_at_depot"]:
             # No route, try to return to a depot if not already there
             # This is a very simple "return home" logic
-            if self.current_location.location_type != "depot":
-                depots = [loc for loc_id, loc in self.model.locations.items() if loc.location_type == "depot"]
+            if self.current_location.type != "depot":
+                depots = [loc for loc_id, loc in self.model.locations.items() if loc.type == "depot"]
                 if depots:
                     # print(f"[{self.model.steps}] {self.descriptive_id} has no route, returning to depot.")
                     self.assign_route([self.model.random.choice(depots)]) # Go to a random depot
@@ -288,50 +288,3 @@ class Truck(Agent):
 
         # else:
             # print(f"[{self.model.steps}] {self.descriptive_id} is {self.status} at {self.current_location.name}, no action this step.")
-
-
-# The __main__ block is for standalone testing and will not be used by Mesa.
-# It needs significant updates to work with the new Agent structure (requires a mock Model).
-# For now, we'll rely on testing within the Mesa model.
-if __name__ == '__main__':
-    print("This script defines the Truck Agent for Mesa. Run it via a Mesa model.")
-    # To test standalone, you'd need to mock a Mesa model and scheduler:
-    # class MockModel:
-    #     def __init__(self):
-    #         self.schedule = MockScheduler()
-    #         self.locations = {} # Mock locations
-    # class MockScheduler:
-    #     def __init__(self):
-    #         self.time = 0
-    #
-    # # Mock Location for agent testing
-    # class MockLocationForAgentTest:
-    #     def __init__(self, name, location_type="generic"):
-    #         self.name = name
-    #         self.location_type = location_type
-    #     def __str__(self): return self.name
-    #     def truck_arrived(self, sim_time, truck_id): print(f"Mock: {truck_id} arrived at {self.name} at {sim_time}")
-    #     def truck_departed(self, sim_time, truck_id): print(f"Mock: {truck_id} departed {self.name} at {sim_time}")
-
-    # model = MockModel()
-    # depot = MockLocationForAgentTest("Depot Alpha", "depot")
-    # customer = MockLocationForAgentTest("Customer Beta", "customer")
-    # model.locations = {"depot_alpha": depot, "customer_beta": customer}
-    #
-    # truck1 = Truck(unique_id=1, model=model, descriptive_id="TRK-007", start_location=depot, capacity_kg=10000)
-    # print(truck1)
-    #
-    # model.schedule.time = 1
-    # truck1.assign_route([customer, depot])
-    #
-    # model.schedule.time = 2
-    # truck1.step() # Should try to move
-    # print(truck1)
-    #
-    # model.schedule.time = 3
-    # truck1.step() # Should be 'idle_at_customer'
-    # print(truck1)
-    #
-    # print("\n--- Truck 1 History ---")
-    # for event in truck1.history:
-    #     print(event)
