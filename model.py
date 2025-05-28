@@ -1,144 +1,125 @@
-import random
-import math
-from mesa import Model
-from mesa.space import ContinuousSpace
+"""
+Defines the Mesa Model for the Fleet POL Simulator.
+"""
+import mesa
 from mesa.agent import AgentSet
-from agents import Truck
-from environment import Location
+import random
 
-class FleetModel(Model):
+from agents import Truck
+from environment import Location # Assuming Location remains a non-agent class for now
+
+class FleetModel(mesa.Model):
     """
     The main model for the fleet simulation.
     Manages trucks (agents) and locations.
     """
-    # Default space for visualization components that might access it at class level
-    space = ContinuousSpace(x_max=50, y_max=50, torus=False)
+    def __init__(self, num_trucks: int=10, num_depots: int=2, num_customers: int=20, map_width: int=50, map_height: int=50, seed=None) -> None:
+        """
+        Initialize the FleetModel.
 
-    def __init__(self, num_trucks=10, num_depots=2, num_customers=20, map_width=50, map_height=50, seed=None):
-        super().__init__(seed=seed)
-
+        Args:
+            num_trucks (int): Number of trucks to create.
+            num_depots (int): Number of depots to create.
+            num_customers (int): Number of customer locations to create.
+            map_width (int): Width of the simulated area (for generating locations).
+            map_height (int): Height of the simulated area.
+        """
+        super().__init__(seed=seed) # Pass seed to base Model class
         self.num_trucks = num_trucks
-        self.random = random.Random(seed)
-        self._current_agent_id = 0
+        self._current_agent_id = 0 # Manual ID counter
+        
+        # In Mesa 3, AgentSet replaces traditional schedulers for many use cases.
+        # Agents are added to this set, and then operations like shuffle_do are called.
+        # The first argument is the initial list of agents, the second is the model.
+        self.fleet_agents = AgentSet([], self) 
+        self.running = True # For conditional stopping via DataCollector or other means
 
-        # New spatial grid setup for visualization
-        # self.space = ContinuousSpace(map_width, map_height, torus=False)
+        self.locations = {} # Store Location objects, keyed by name or ID
+        self.map_width = map_width
+        self.map_height = map_height
 
-        # AgentSet is used to manage trucks
-        # The second argument should be the random.Random instance for AgentSet's internal shuffling.
-        self.fleet_agents = AgentSet([], self.random)
-        self.schedule = self.fleet_agents
+        # Create Locations
+        self._create_locations(num_depots, num_customers)
 
-        # Create locations
-        self.locations = []
-        for i in range(num_depots):
-            loc = Location(
-                unique_id=self.next_id(),
-                name=f"Depot-{chr(65 + i)}",
-                loc_type="depot",
-                lat=self.random.uniform(0, map_height),
-                lon=self.random.uniform(0, map_width),
-                resources={"loading_docks": self.random.randint(1, 5),
-                           "fuel_liters": self.random.randint(20000, 50000),
-                           "widgets": self.random.randint(500, 2000)}, # Initial stock of widgets
-                production_details={"resource_name": "widgets",
-                                    "rate_per_step": self.random.randint(50, 150), # Depots produce widgets
-                                    "capacity": self.random.randint(5000, 10000)},
-                model=self
-            )
-            self.locations.append(loc)
+        # Create Truck Agents
+        # Ensure depots exist before creating trucks that start at depots
+        depot_locations = [loc for loc in self.locations.values() if loc.location_type == "depot"]
+        if not depot_locations:
+            raise ValueError("No depots created. Trucks need a starting depot.")
 
-        for i in range(num_customers):
-            loc = Location(
-                unique_id=self.next_id(),
-                name=f"Customer-{i+1:03d}",
-                loc_type="customer",
-                lat=self.random.uniform(0, map_height),
-                lon=self.random.uniform(0, map_width),
-                resources={}, # Customers start with no resources
-                model=self
-            )
-            self.locations.append(loc)
-            # Add initial demands to customers
-            if loc.type == "customer":
-                num_initial_demands = self.random.randint(0, 3) # Each customer can start with 0 to 3 demands
-                for _ in range(num_initial_demands):
-                    loc.add_demand(self.steps, "widgets", self.random.randint(10, 100))
-
-
-        # Create trucks
-        for i in range(num_trucks):
-            start_depot = self.random.choice([loc for loc in self.locations if loc.type == "depot"])
-            truck_agent = Truck(
-                unique_id=self.next_id(),
-                descriptive_id=f"TRK-{i+1:03d}",
-                start_location=start_depot,
-                model=self,
-                capacity_kg=self.random.randint(15, 30) * 1000 # Added capacity_kg
-            )
+        for i in range(self.num_trucks):
+            truck_id_str = f"TRK-{str(i+1).zfill(3)}"
+            start_depot = self.random.choice(depot_locations)
+            # Mesa agent unique_id is an int, truck_id_str is for description
+            truck_agent = Truck(unique_id=self._get_next_agent_id(), # Using manual ID generation
+                                model=self,
+                                descriptive_id=truck_id_str,
+                                start_location=start_depot,
+                                capacity_kg=self.random.randint(15, 30) * 1000)
             self.fleet_agents.add(truck_agent)
-            # Place truck on space
-            self.space.place_agent(truck_agent, (start_depot.longitude, start_depot.latitude))
-            self.schedule.add(truck_agent)
-            truck_agent.pos = (start_depot.longitude, start_depot.latitude)
+            # print(f"Created: {truck_agent} at {start_depot.name}")
 
-    def next_id(self):
+        # Optional: DataCollector for collecting agent/model data
+        self.datacollector = mesa.DataCollector(
+            model_reporters={"TotalCargo": lambda m: sum(a.current_cargo_kg for a in m.fleet_agents if isinstance(a, Truck))}, # Renamed from m.agents
+            agent_reporters={"Status": "status", "Location": lambda a: a.current_location.name, "Cargo": "current_cargo_kg"}
+        )
+
+    def _get_next_agent_id(self) -> int:
+        """Generates a new unique ID for an agent."""
         self._current_agent_id += 1
         return self._current_agent_id
 
-    def step(self):
-        # --- Location Production Step ---
-        for loc in self.locations:
-            if hasattr(loc, 'step_produce'):
-                loc.step_produce()
+    def _create_locations(self, num_depots: int, num_customers: int) -> None:
+        """Helper method to create and store locations."""
+        loc_id_counter = 0
+        for i in range(num_depots):
+            loc_id_counter += 1
+            name = f"Depot-{chr(65+i)}" # Depot-A, Depot-B
+            lat = round(self.random.uniform(0, self.map_height), 4)
+            lon = round(self.random.uniform(0, self.map_width), 4)
+            depot = Location(name=name, latitude=lat, longitude=lon, location_type="depot")
+            # Pass self.steps if Location's __init__ or _log_event expects it from model
+            # For now, Location logs its own creation time as 0 or relies on explicit time passing.
+            # depot._log_event(self.steps, "location_created_by_model", {"details": "..."})
+            self.locations[name] = depot
+            # print(f"Created location: {depot}")
 
-        # --- Agent (Truck) Step ---
-        self.fleet_agents.shuffle_do("step") # Calls step() on each truck
+        for i in range(num_customers):
+            loc_id_counter += 1
+            name = f"Customer-{str(i+1).zfill(3)}"
+            lat = round(self.random.uniform(0, self.map_height), 4)
+            lon = round(self.random.uniform(0, self.map_width), 4)
+            customer = Location(name=name, latitude=lat, longitude=lon, location_type="customer")
+            self.locations[name] = customer
+            # print(f"Created location: {customer}")
         
-        # --- Demand Generation Step ---
-        # Periodically add new demands to customers
-        if self.random.random() < 0.1: # 10% chance each step to add a new demand somewhere
-            customer_locs = [loc for loc in self.locations if loc.type == "customer"]
-            if customer_locs:
-                chosen_customer = self.random.choice(customer_locs)
-                chosen_customer.add_demand(self.steps, "widgets", self.random.randint(20,150))
-                # print(f"[{self.steps}] New demand added at {chosen_customer.name}")
+        # Add some resources to depots
+        for loc_name, loc_obj in self.locations.items():
+            if loc_obj.location_type == "depot":
+                # self.steps is 0 during __init__, which is fine for initial resource logging.
+                loc_obj.add_resource(self.steps, "loading_docks", self.random.randint(2,5))
+                loc_obj.add_resource(self.steps, "fuel_liters", self.random.randint(20000, 50000))
 
-        # --- Route Assignment Step ---
-        # Assign new routes to idle trucks at depots, prioritizing customers with demands
-        for agent in self.fleet_agents:
+
+    def step(self) -> None:
+        """
+        Advance the model by one step.
+        """
+        self.datacollector.collect(self) # Collect data at the beginning of the step
+        self.fleet_agents.shuffle_do("step") # Mesa v3: AgentSet calls agent's 'step' method. Renamed from self.agents
+        # print(f"--- Model step {self.steps} complete. Time: {self.steps} ---")
+
+        # Simple logic for trucks to get new routes if idle at depot
+        for agent in self.fleet_agents: # Iterate over AgentSet. Renamed from self.agents
             if isinstance(agent, Truck) and agent.status == "idle_at_depot" and not agent.route:
-                # 30% chance to try to get a new route
-                if self.random.random() < 0.3:
-                    # Find customers with pending demands for "widgets" (or other producible goods)
-                    customers_with_demands = []
-                    for loc in self.locations:
-                        if loc.type == "customer" and hasattr(loc, 'demands'):
-                            if any(d['status'] in ['pending', 'partially_fulfilled'] and d['resource_name'] == "widgets" for d in loc.demands):
-                                customers_with_demands.append(loc)
-                    
-                    route_plan = []
-                    if not customers_with_demands:
-                        # If no customers have demands for widgets, maybe a random exploratory route or stay put
-                        # For now, let's try a random customer if any exist for other potential goods (not yet modeled)
-                        # Or simply don't assign a route if no specific demand to target.
-                        # For simplicity, if no widget demands, truck stays idle unless we add other logic.
-                        pass # Truck remains idle or could get a generic route
-                    else:
-                        # Prioritize customers with demands for widgets
-                        num_stops = self.random.randint(1, min(3, len(customers_with_demands)))
-                        route_plan = self.random.sample(customers_with_demands, num_stops)
-
-                    if not route_plan:
-                        continue # No route determined for this truck this step
-
-                    depots = [loc for loc in self.locations if loc.type == "depot"]
+                if self.random.random() < 0.3: # 30% chance to get a new random route
+                    num_stops = self.random.randint(1, 3)
+                    route_plan = [self.random.choice(list(self.locations.values())) for _ in range(num_stops)]
+                    # Ensure the route ends back at a depot (can be the same or different)
+                    depots = [loc for loc_name, loc in self.locations.items() if loc.location_type == "depot"]
                     if depots:
-                        route_plan.append(self.random.choice(depots)) # End route at a depot
-                    else:
-                        # If no depots, truck can't return. This is a modeling issue.
-                        # For now, if no depots, don't assign this route.
-                        continue
+                        route_plan.append(self.random.choice(depots))
                     
                     agent.assign_route(route_plan)
-                    # Optional: print(f"[{self.steps}] Assigned new route to {agent.descriptive_id}: {[loc.name for loc in route_plan]}")
+                    # print(f"[{self.steps}] Assigned new route to {agent.descriptive_id}: {[loc.name for loc in route_plan]}")
