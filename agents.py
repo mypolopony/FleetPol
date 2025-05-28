@@ -31,7 +31,7 @@ class Truck(Agent):
         self.status = "idle_at_depot"
         self.route = []  # List of Location objects
         self.history = [] # List of (sim_time, event_type, details)
-
+    
         # Log creation event using model's current time
         self._log_event("truck_created", {
             "descriptive_id": self.descriptive_id,
@@ -81,7 +81,7 @@ class Truck(Agent):
         self.current_location = destination_location
         # Update agent's position in the ContinuousSpace
         if hasattr(self.model, 'space') and self.model.space is not None:
-            self.model.space.move_agent(self, (destination_location.lon, destination_location.lat))
+            self.model.space.move_agent(self, (destination_location.longitude, destination_location.latitude))
         
         self.status = "en_route" # Status becomes en_route upon departure
 
@@ -168,9 +168,9 @@ class Truck(Agent):
         if self.status == "en_route":
             # If it was 'en_route', it means it "arrived" in this step (simplified).
             # The 'arrive' event was logged by _perform_move. Now set status based on location type.
-            if self.current_location.location_type == "depot":
+            if self.current_location.type == "depot":
                 self.set_status("idle_at_depot")
-            elif self.current_location.location_type == "customer":
+            elif self.current_location.type == "customer":
                 self.set_status("idle_at_customer")
             else:
                 self.set_status("idle_at_other")

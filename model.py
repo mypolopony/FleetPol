@@ -77,3 +77,31 @@ class FleetModel(Model):
 
     def step(self):
         self.fleet_agents.shuffle_do("step")
+        # Assign new routes to idle trucks at depots
+        for agent in self.fleet_agents:
+            if isinstance(agent, Truck) and agent.status == "idle_at_depot" and not agent.route:
+                # 30% chance to get a new random route
+                if self.random.random() < 0.3: 
+                    num_stops = self.random.randint(1, 3)
+                    
+                    customer_locations = [loc for loc in self.locations if loc.type == "customer"]
+                    if not customer_locations:
+                        continue # Skip if no customers to assign
+
+                    # Ensure we don't try to pick more stops than available customers
+                    actual_num_stops = min(num_stops, len(customer_locations))
+                    if actual_num_stops == 0:
+                        continue
+
+                    route_plan = self.random.sample(customer_locations, actual_num_stops)
+                    
+                    depots = [loc for loc in self.locations if loc.type == "depot"]
+                    if depots:
+                        route_plan.append(self.random.choice(depots))
+                    else:
+                        # If there are no depots, this truck can't complete a typical cycle.
+                        # For now, if no depots, don't assign this route.
+                        continue
+                    
+                    agent.assign_route(route_plan)
+                    # Optional: print(f"[{self.steps}] Assigned new route to {agent.descriptive_id}: {[loc.name for loc in route_plan]}")
