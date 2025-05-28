@@ -70,13 +70,13 @@ For one truck:
 
 ```csv
 Step  AgentID  Status                             Location      Cargo  Comment
-1     1        idle_at_depot                      Depot-B       0 	   Truck us waiting at the depot	
+1     1        idle_at_depot                      Depot-B       0 	  Truck us waiting at the depot	
 2     1        idle_at_depot                      Depot-B       0      There's only a 30% it gets a route
 3     1        idle_at_depot                      Depot-B       0      Still waiting for that 30%
 4     1        idle_at_depot                      Depot-B       0      Still waiting
 5     1        pending_load_for_route             Depot-B       0      Receives a route
 6     1        loading_at_depot                   Depot-B       968    Loads materials based on customer domands
-7     1        pending_departure_to_Customer-008  Depot-B       968	   Waiting to travel to first customer (WHY?)
+7     1        pending_departure_to_Customer-008  Depot-B       968	  Waiting to travel to first customer (WHY?)
 8     1        en_route                           Customer-008  968    Arrives at first customer 
 9     1        idle_at_customer                   Customer-008  968    Waiting tick
 10    1        finished_unloading                 Customer-008  902    Finished unloading materials across multiple orders (could probably expand for each order at that customer)
