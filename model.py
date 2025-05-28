@@ -24,14 +24,15 @@ class FleetModel(mesa.Model):
             map_width (int): Width of the simulated area (for generating locations).
             map_height (int): Height of the simulated area.
         """
-        super().__init__(seed=seed) # Pass seed to base Model class
+        super().__init__() # Call base __init__ without seed first
         self.num_trucks = num_trucks
         self._current_agent_id = 0 # Manual ID counter
-        # self.random should now be initialized by super().__init__(seed=seed)
+
+
         # In Mesa 3, AgentSet replaces traditional schedulers for many use cases.
         # Agents are added to this set, and then operations like shuffle_do are called.
-        # The first argument is the initial list of agents, the second is the model.
-        self.fleet_agents = AgentSet([], self) # Renamed from self.agents
+        # The first argument is the initial list of agents, the second is the randomizer.
+        self.fleet_agents = AgentSet([], random.Random(seed)) # Renamed from self.agents
         self.running = True # For conditional stopping via DataCollector or other means
 
         self.locations = {} # Store Location objects, keyed by name or ID
@@ -124,7 +125,6 @@ class FleetModel(mesa.Model):
                     
                     agent.assign_route(route_plan)
                     # print(f"[{self.steps}] Assigned new route to {agent.descriptive_id}: {[loc.name for loc in route_plan]}")
-
 
 if __name__ == '__main__':
     # Example of running the model
